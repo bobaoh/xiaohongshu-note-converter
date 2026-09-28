@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.vscode/
+.venv/
+venv/
+output/
+media/
+*.mp4
+*.wav
+*.png
+*.jpg
+*.jpeg
+*.onnx
+.env

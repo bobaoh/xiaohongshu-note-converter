@@ -16,4 +16,5 @@ python -m pip install -r (Join-Path $PSScriptRoot '..\requirements.txt')
 
 Write-Host ''
 Write-Host 'Setup complete.'
-Write-Host 'Run: python .\scripts\extract_recipe.py "<PUBLIC_XHS_LINK>" --output .\output'
+Write-Host 'In Claude Code, run: /xhs-note <PUBLIC_XHS_LINK> [format]'
+Write-Host 'Or extract directly: python .\scripts\extract_note.py "<PUBLIC_XHS_LINK>" --output .\output\<name>'

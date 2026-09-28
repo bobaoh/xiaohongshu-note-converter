@@ -25,24 +25,20 @@ def fetch_text(url: str) -> tuple[str, str]:
 
 
 def find_video_url(page: str) -> str:
-    decoded = html.unescape(page).replace("\\u002F", "/").replace("\\/", "/")
-    candidates = re.findall(
-        r"https?://[^\"'<>\\s]+?\.mp4(?:\?[^\"'<>\\s]+)?", decoded
-    )
+    page = html.unescape(page)
+    field_urls = re.findall(r"(?:masterUrl|backupUrls?)\"?\s*:\s*\"([^\"]+)", page)
+    candidates = [url.replace(r"\u002F", "/").replace(r"\/", "/") for url in field_urls]
+    candidates = [url for url in candidates if ".mp4" in url]
     h264 = [url for url in candidates if "_259.mp4" in url or "h264" in url.lower()]
     if h264:
         return h264[0]
     if candidates:
         return candidates[0]
 
-    master_match = re.search(r"masterUrl.{0,800}", decoded, re.IGNORECASE)
-    if master_match:
-        url_match = re.search(
-            r"https?://[^\"'<>\\s]+?\.mp4(?:\?[^\"'<>\\s]+)?",
-            master_match.group(0),
-        )
-        if url_match:
-            return url_match.group(0)
+    decoded = page.replace(r"\u002F", "/").replace(r"\/", "/")
+    candidates = re.findall(r"https?://[^\"'<>\s]+?\.mp4(?:\?[^\"'<>\s]+)?", decoded)
+    if candidates:
+        return candidates[0]
     raise RuntimeError("No public MP4 video URL was found in the page.")
 
 

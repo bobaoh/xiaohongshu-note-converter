@@ -1,8 +1,8 @@
 # Xiaohongshu Recipe Extractor
 
-A standalone workflow for turning a public Xiaohongshu/RedNote video into a structured recipe. It does not require VS Code or a Copilot-specific skill system.
+A standalone workflow for turning a public Xiaohongshu/RedNote note into a structured recipe. It does not require VS Code or a Copilot-specific skill system.
 
-It also supports ordinary image posts through `scripts/extract_post.py`.
+One command handles video notes, ordinary image notes, and image notes with Live Photos. The script reads the note's embedded page data to detect which kind it is.
 
 ## Requirements
 
@@ -36,18 +36,15 @@ For a short link:
 python .\scripts\extract_recipe.py "http://xhslink.com/o/example" --output .\output
 ```
 
-For a non-video image post:
-
-```powershell
-python .\scripts\extract_post.py "http://xhslink.com/o/example" --output .\output
-```
+The same command works for image posts. `scripts/extract_post.py` is kept as an alias.
 
 The script writes:
 
-- `output/transcript.txt`: timestamped speech transcript
-- `output/ocr.txt`: deduplicated Chinese/English text detected in video frames
-- `output/metadata.json`: title, resolved URL, and processing status
-- `output/media/`: downloaded post images for visual verification
+- `output/metadata.json`: note type (`video` or `normal`), title, resolved URL, and processing status
+- `output/caption.txt`: the author's title, description, and tags, which often contain the full recipe
+- `output/transcript.txt`: timestamped speech transcript (empty for image posts and silent videos)
+- `output/ocr.txt`: deduplicated Chinese/English text from video frames or post images
+- `output/media/`: the note's own images (image posts), or the video, audio, and frames with `--keep-media`
 
 Then give those files to an AI with the instructions in `AI_INSTRUCTIONS.md`.
 
@@ -55,9 +52,9 @@ Then give those files to an AI with the instructions in `AI_INSTRUCTIONS.md`.
 
 If the AI can run terminal commands, give it this repository and ask:
 
-> Read `AI_INSTRUCTIONS.md`. Run the extractor on this public Xiaohongshu link, then convert the resulting transcript and OCR into the required recipe format.
+> Read `AI_INSTRUCTIONS.md`. Run the extractor on this public Xiaohongshu link, then convert the resulting caption, transcript, and OCR into the required recipe format.
 
-If the AI cannot run code or access files, it cannot directly download and process the video. Run the script locally first, then upload `transcript.txt`, `ocr.txt`, or screenshots to that AI.
+If the AI cannot run code or access files, it cannot directly download and process the video. Run the script locally first, then upload `caption.txt`, `transcript.txt`, `ocr.txt`, or screenshots to that AI.
 
 ## Access and copyright
 

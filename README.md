@@ -2,6 +2,8 @@
 
 A standalone workflow for turning a public Xiaohongshu/RedNote video into a structured recipe. It does not require VS Code or a Copilot-specific skill system.
 
+It also supports ordinary image posts through `scripts/extract_post.py`.
+
 ## Requirements
 
 - Windows 10/11
@@ -34,11 +36,18 @@ For a short link:
 python .\scripts\extract_recipe.py "http://xhslink.com/o/example" --output .\output
 ```
 
+For a non-video image post:
+
+```powershell
+python .\scripts\extract_post.py "http://xhslink.com/o/example" --output .\output
+```
+
 The script writes:
 
 - `output/transcript.txt`: timestamped speech transcript
 - `output/ocr.txt`: deduplicated Chinese/English text detected in video frames
 - `output/metadata.json`: title, resolved URL, and processing status
+- `output/media/`: downloaded post images for visual verification
 
 Then give those files to an AI with the instructions in `AI_INSTRUCTIONS.md`.
 

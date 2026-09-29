@@ -16,8 +16,8 @@
 ### Windows
 
 ```powershell
-git clone https://github.com/bobaoh/xiaohongshu-recipe-extractor.git
-cd xiaohongshu-recipe-extractor
+git clone https://github.com/bobaoh/xiaohongshu-note-converter.git
+cd xiaohongshu-note-converter
 Set-ExecutionPolicy -Scope Process Bypass
 .\scripts\setup-windows.ps1
 ```
@@ -27,8 +27,8 @@ Set-ExecutionPolicy -Scope Process Bypass
 ### macOS / Linux
 
 ```bash
-git clone https://github.com/bobaoh/xiaohongshu-recipe-extractor.git
-cd xiaohongshu-recipe-extractor
+git clone https://github.com/bobaoh/xiaohongshu-note-converter.git
+cd xiaohongshu-note-converter
 brew install ffmpeg            # macOS
 # sudo apt install ffmpeg      # Ubuntu / Debian
 python3 -m pip install -r requirements.txt
@@ -36,10 +36,10 @@ python3 -m pip install -r requirements.txt
 
 ## 2. 使用
 
-**一定要在仓库根目录启动 Claude Code**（也就是 `xiaohongshu-recipe-extractor` 文件夹）。这个工具是项目级 skill，放在 `.claude/skills/xhs-note/` 里，在别的目录打开 Claude Code 就找不到它。
+**一定要在仓库根目录启动 Claude Code**（也就是 `xiaohongshu-note-converter` 文件夹）。这个工具是项目级 skill，放在 `.claude/skills/xhs-note/` 里，在别的目录打开 Claude Code 就找不到它。
 
 ```bash
-cd xiaohongshu-recipe-extractor
+cd xiaohongshu-note-converter
 claude
 ```
 

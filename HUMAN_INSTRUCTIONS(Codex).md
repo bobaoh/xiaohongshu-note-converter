@@ -18,8 +18,8 @@
 ### Windows
 
 ```powershell
-git clone https://github.com/bobaoh/xiaohongshu-recipe-extractor.git
-cd xiaohongshu-recipe-extractor
+git clone https://github.com/bobaoh/xiaohongshu-note-converter.git
+cd xiaohongshu-note-converter
 Set-ExecutionPolicy -Scope Process Bypass
 .\scripts\setup-windows.ps1
 ```
@@ -29,8 +29,8 @@ Set-ExecutionPolicy -Scope Process Bypass
 ### macOS / Linux
 
 ```bash
-git clone https://github.com/bobaoh/xiaohongshu-recipe-extractor.git
-cd xiaohongshu-recipe-extractor
+git clone https://github.com/bobaoh/xiaohongshu-note-converter.git
+cd xiaohongshu-note-converter
 brew install ffmpeg            # macOS
 # sudo apt install ffmpeg      # Ubuntu / Debian
 python3 -m pip install -r requirements.txt
@@ -56,7 +56,7 @@ network_access = true
 **一定要在仓库根目录启动 Codex**，否则它读不到 `AGENTS.md`：
 
 ```bash
-cd xiaohongshu-recipe-extractor
+cd xiaohongshu-note-converter
 codex
 ```
 

@@ -26,6 +26,8 @@ class Note:
     note_type: str
     note_id: str = ""
     published_at: str | None = None
+    author: str = ""
+    author_id: str = ""
     title: str = ""
     desc: str = ""
     tags: list[str] = field(default_factory=list)
@@ -165,6 +167,7 @@ def load_note(url: str) -> Note:
         return fallback_note(resolved_url, page)
 
     images = data.get("imageList") or []
+    user = data.get("user") or {}
     desc = clean_desc(data.get("desc") or "")
     # Some authors leave the title field empty and put the title on the first line of the description.
     title = data.get("title") or next((line.strip() for line in desc.splitlines() if line.strip()), "")
@@ -173,6 +176,8 @@ def load_note(url: str) -> Note:
         note_type=data.get("type") or "unknown",
         note_id=data.get("noteId") or note_id_from_url(resolved_url),
         published_at=published_date(data.get("time")),
+        author=user.get("nickName") or user.get("nickname") or "",
+        author_id=user.get("userId") or "",
         title=title,
         desc=desc,
         tags=[tag.get("name") for tag in data.get("tagList") or [] if tag.get("name")],
@@ -333,7 +338,12 @@ def process_images(note: Note, output_dir: Path, metadata: dict) -> None:
 
 
 def write_caption(note: Note, output_dir: Path) -> None:
-    parts = [f"标题：{note.title}" if note.title else "", note.desc, "标签：" + " ".join(f"#{tag}" for tag in note.tags) if note.tags else ""]
+    parts = [
+        f"标题：{note.title}" if note.title else "",
+        f"作者：{note.author}" if note.author else "",
+        note.desc,
+        "标签：" + " ".join(f"#{tag}" for tag in note.tags) if note.tags else "",
+    ]
     (output_dir / "caption.txt").write_text("\n\n".join(part for part in parts if part), encoding="utf-8")
 
 
@@ -363,6 +373,8 @@ def main(argv: list[str] | None = None) -> int:
                 "note_type": note.note_type,
                 "title": note.title,
                 "published_at": note.published_at,
+                "author": note.author or None,
+                "author_id": note.author_id or None,
                 "parser": note.source,
             }
         )

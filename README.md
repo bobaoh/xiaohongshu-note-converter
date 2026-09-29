@@ -75,7 +75,7 @@ Every result JSON shares one envelope, so results from different formats can be 
 ```json
 {
   "format": "recipe",
-  "source": {"url": "...", "note_id": "...", "title": "...", "note_type": "video", "published_at": "2026-09-20"},
+  "source": {"url": "...", "note_id": "...", "title": "...", "author": "...", "note_type": "video", "published_at": "2026-09-20"},
   "sources_used": ["caption", "ocr"],
   "data": {},
   "uncertain": [],

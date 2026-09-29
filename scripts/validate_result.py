@@ -62,6 +62,21 @@ def field_table(text: str) -> list[dict[str, object]]:
     return fields
 
 
+def check_credits(markdown: str, author: object, url: str) -> list[str]:
+    """The title must be followed by the author line and then the original-link line."""
+    expected = [f"原作者：{author or '未知'}", f"原链接：[点这里]({url})"]
+    lines = [line.strip() for line in markdown.splitlines() if line.strip()]
+    if not lines or not lines[0].startswith("# "):
+        return ["Markdown 第一行必须是 # 标题"]
+    if lines[1:3] != expected:
+        return ["标题下面必须依次是这两行：" + " / ".join(expected)]
+    if f"\n\n{expected[0]}\n\n{expected[1]}\n" not in markdown.replace("\r\n", "\n") + "\n":
+        return ["原作者和原帖链接两行前后都要空一行，否则 Markdown 会把它们显示成同一行"]
+    if markdown.count(expected[1]) > 1:
+        return ["原帖链接只能出现一次，放在标题下面"]
+    return []
+
+
 def is_empty(value: object) -> bool:
     return value is None or value == "" or value == [] or value == {}
 
@@ -78,7 +93,8 @@ def validate(result_path: Path, formats_dir: Path) -> tuple[list[str], list[str]
         return ["JSON 顶层必须是对象"], warnings
 
     markdown_path = result_path.with_suffix(".md")
-    if not markdown_path.exists() or not markdown_path.read_text(encoding="utf-8").strip():
+    markdown = markdown_path.read_text(encoding="utf-8").strip() if markdown_path.exists() else ""
+    if not markdown:
         errors.append(f"缺少对应的 Markdown 文件或文件为空：{markdown_path.name}")
 
     format_name = result.get("format")
@@ -91,6 +107,10 @@ def validate(result_path: Path, formats_dir: Path) -> tuple[list[str], list[str]
         for key in SOURCE_KEYS:
             if is_empty(source.get(key)):
                 errors.append(f"source.{key} 缺失或为空")
+        if "author" not in source:
+            errors.append("source.author 缺失（没有作者信息时写 null）")
+        if markdown and isinstance(source.get("url"), str) and source["url"]:
+            errors += check_credits(markdown, source.get("author"), source["url"])
     sources_used = result.get("sources_used")
     if not isinstance(sources_used, list) or not sources_used:
         errors.append("外壳字段 sources_used 缺失或为空数组")

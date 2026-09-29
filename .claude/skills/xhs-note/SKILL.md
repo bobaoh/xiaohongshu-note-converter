@@ -56,7 +56,7 @@ python scripts/extract_note.py "<链接>" --output "output/<key>"
 
 | 文件 | 内容 | 注意 |
 |---|---|---|
-| `metadata.json` | `note_id`、`note_type`（`video`/`normal`）、`title`、`published_at`、`video.has_audio`、`transcription` | 先看状态和警告 |
+| `metadata.json` | `note_id`、`note_type`（`video`/`normal`）、`title`、`author`、`published_at`、`video.has_audio`、`transcription` | 先看状态和警告。旧的提取结果没有 `author` 字段时，重新提取一次 |
 | `caption.txt` | 作者写的标题、正文、标签 | 配料表、清单、行程经常完整写在这里 |
 | `ocr.txt` | 视频帧 `[12.0s|0.91]` 或图片 `[image-03|0.88]` 中的文字 | 视频的字幕通常最完整 |
 | `transcript.txt` | 带时间戳的语音转写 | 图文帖和无声视频为空 |
@@ -86,6 +86,7 @@ python scripts/extract_note.py "<链接>" --output "output/<key>"
     "url": "<metadata.input_url>",
     "note_id": "<metadata.note_id>",
     "title": "<metadata.title>",
+    "author": "<metadata.author 或 null>",
     "note_type": "<metadata.note_type>",
     "published_at": "<metadata.published_at 或 null>"
   },
@@ -99,6 +100,23 @@ python scripts/extract_note.py "<链接>" --output "output/<key>"
 - `sources_used` 只列实际用到的来源，取值限于 `caption`、`ocr`、`transcript`、`images`。
 - `uncertain` 列出有疑问的内容：识别不清的文字，以及不同来源之间有冲突的地方。
 - `missing` 列出格式要求但素材里没有的字段。这些字段在 `data` 中填 `null`（数组字段填 `[]`）。
+
+**原作者和原帖链接（所有格式都要有，包括临时格式）**
+
+Markdown 第一行的 `#` 标题下面，紧接着写这两行，每行前后都空一行：
+
+```markdown
+# <标题>
+
+原作者：<source.author>
+
+原链接：[点这里](<source.url>)
+```
+
+- `<source.author>` 取 `metadata.author`，也就是作者昵称；为 null 时写 `原作者：未知`。
+- `<source.url>` 就是用户提供的原链接，和 JSON 里的 `source.url` 一致。不要换成跳转后的长链接，那条链接带有分享者 ID 等追踪参数。
+- 这两行放在格式模板的其他内容（如 `📅 行程`、`> 一句话概括`）之前。
+- 格式文件的 Markdown 模板里不用写这两行。
 
 ### 6. 保存并校验
 

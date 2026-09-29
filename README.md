@@ -2,6 +2,8 @@
 
 Turn a public Xiaohongshu/RedNote note into a structured Markdown + JSON document in any format you define: a recipe, a summary, a travel guide, a product review, a tutorial, or your own.
 
+**中文使用说明：** [Claude Code 版](HUMAN_INSTRUCTIONS(ClaudeCode).md) · [Codex 版](HUMAN_INSTRUCTIONS(Codex).md)
+
 The design has three layers:
 
 | Layer | Location | Role |
@@ -97,7 +99,7 @@ The extractor writes these files:
 
 `extract_recipe.py` and `extract_post.py` still work as aliases.
 
-For AIs other than Claude Code, see `AI_INSTRUCTIONS.md`.
+Codex and other agents that read `AGENTS.md` are pointed to the same skill rules automatically. `AGENTS.md` also explains how to use a web chat AI that cannot run commands.
 
 ## Access and copyright
 

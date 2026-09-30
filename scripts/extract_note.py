@@ -141,10 +141,15 @@ def fallback_note(resolved_url: str, page: str) -> Note:
     decoded = unescape_url(page)
     videos = [
         url
-        for url in re.findall(r"https?://[^\"'<>\s]+?\.mp4(?:\?[^\"'<>\s]+)?", decoded)
+        # Exclude backslashes: inside JSON-in-JSON fields the closing quote is \", not ".
+        for url in re.findall(r"https?://[^\"'<>\s\\]+?\.mp4(?:\?[^\"'<>\s\\]+)?", decoded)
         if "LIVEPHOTO" not in url.upper() and "/10/19/" not in url
     ]
-    videos = sorted(dict.fromkeys(videos), key=lambda url: "_259.mp4" not in url and "h264" not in url.lower())
+    # Prefer H.264 streams, then primary hosts over the sns-bak backup hosts.
+    videos = sorted(
+        dict.fromkeys(videos),
+        key=lambda url: ("_259.mp4" not in url and "h264" not in url.lower(), "sns-bak" in url),
+    )
     note = Note(
         resolved_url=resolved_url,
         note_type=query_type,
@@ -159,6 +164,11 @@ def fallback_note(resolved_url: str, page: str) -> Note:
 
 def load_note(url: str) -> Note:
     resolved_url, page = fetch_page(url)
+    return note_from_page(resolved_url, page)
+
+
+def note_from_page(resolved_url: str, page: str) -> Note:
+    """Parse a fetched note page. Kept separate from fetching so tests can use saved pages."""
     state = parse_state(page)
     data = find_note_data(state) if state else None
     if not data:
@@ -246,24 +256,40 @@ def transcribe(audio_path: Path, output_path: Path) -> dict[str, object]:
     model_name = os.environ.get("WHISPER_MODEL", "small")
     model = WhisperModel(model_name, device="cpu", compute_type="int8")
     segments, info = model.transcribe(audio_path, vad_filter=True, beam_size=5)
-    lines = 0
+    texts = []
     with output_path.open("w", encoding="utf-8") as output:
         for segment in segments:
             text = segment.text.strip()
             if text:
                 output.write(f"[{segment.start:.1f}-{segment.end:.1f}] {text}\n")
-                lines += 1
+                texts.append(text)
     result: dict[str, object] = {
         "status": "complete",
         "model": model_name,
         "language": info.language,
         "language_probability": info.language_probability,
-        "lines": lines,
+        "lines": len(texts),
     }
-    if info.language_probability < 0.5 or lines <= 2:
-        # Music-only videos make Whisper guess a language and hallucinate short phrases such as "You".
-        result["warning"] = "little or no recognizable speech; the transcript is probably noise, so rely on OCR"
+    warning = speech_warning(info.language_probability, texts)
+    if warning:
+        result["warning"] = warning
     return result
+
+
+MIN_SPEECH_CHARS = 5
+
+
+def speech_warning(language_probability: float, texts: list[str]) -> str | None:
+    """Flag transcripts that are probably noise.
+
+    Music-only audio makes Whisper guess a language with low confidence and hallucinate short
+    phrases such as "You". Judge by the amount of recognized text rather than the number of
+    segments: a short real narration can come back as a single long segment.
+    """
+    chars = sum(len(re.sub(r"[\W_]", "", text)) for text in texts)
+    if language_probability < 0.5 or chars < MIN_SPEECH_CHARS:
+        return "little or no recognizable speech; the transcript is probably noise, so rely on OCR"
+    return None
 
 
 class OcrCollector:
@@ -295,27 +321,33 @@ def process_video(note: Note, work_dir: Path, output_dir: Path, metadata: dict) 
         raise RuntimeError("This is a video note, but no public video stream was found.")
     video_path = work_dir / "video.mp4"
     download_first(note.video_urls, video_path, note.resolved_url)
+    metadata.update(analyze_video(video_path, work_dir, output_dir))
+
+
+def analyze_video(video_path: Path, work_dir: Path, output_dir: Path) -> dict[str, object]:
+    """Transcribe and OCR a local video file; writes transcript.txt and ocr.txt, returns metadata fields."""
     probe = probe_streams(video_path)
-    metadata["video"] = probe
+    result: dict[str, object] = {"video": probe}
 
     transcript_path = output_dir / "transcript.txt"
     if probe["has_audio"]:
         audio_path = work_dir / "audio.wav"
         run_ffmpeg(["-y", "-i", str(video_path), "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(audio_path)])
-        metadata["transcription"] = transcribe(audio_path, transcript_path)
+        result["transcription"] = transcribe(audio_path, transcript_path)
     else:
         transcript_path.write_text("", encoding="utf-8")
-        metadata["transcription"] = {"status": "skipped", "reason": "video has no audio track"}
+        result["transcription"] = {"status": "skipped", "reason": "video has no audio track"}
 
     frame_dir = work_dir / "frames"
-    frame_dir.mkdir()
+    frame_dir.mkdir(exist_ok=True)
     run_ffmpeg(["-y", "-i", str(video_path), "-vf", "fps=1/1.5,scale=720:-1", str(frame_dir / "frame-%04d.png")])
     ocr = OcrCollector()
     for frame_path in sorted(frame_dir.glob("*.png")):
         frame_number = int(re.search(r"(\d+)", frame_path.stem).group(1))
         ocr.add(frame_path, f"{(frame_number - 1) * 1.5:.1f}s")
     (output_dir / "ocr.txt").write_text("\n".join(ocr.rows), encoding="utf-8")
-    metadata["ocr_lines"] = len(ocr.rows)
+    result["ocr_lines"] = len(ocr.rows)
+    return result
 
 
 def process_images(note: Note, output_dir: Path, metadata: dict) -> None:
@@ -326,15 +358,27 @@ def process_images(note: Note, output_dir: Path, metadata: dict) -> None:
     for stale in media.glob("image-*.jpg"):
         stale.unlink()
 
-    ocr = OcrCollector()
+    image_paths = []
     for index, url in enumerate(note.image_urls, 1):
         image_path = media / f"image-{index:02d}.jpg"
         download(url, image_path, note.resolved_url)
+        image_paths.append(image_path)
+    metadata.update(analyze_images(image_paths, output_dir))
+    metadata["live_photo_count"] = note.live_photo_count
+
+
+def analyze_images(image_paths: list[Path], output_dir: Path) -> dict[str, object]:
+    """OCR local post images in order; writes an empty transcript.txt and ocr.txt, returns metadata fields."""
+    ocr = OcrCollector()
+    for index, image_path in enumerate(image_paths, 1):
         ocr.add(image_path, f"image-{index:02d}")
     (output_dir / "transcript.txt").write_text("", encoding="utf-8")
     (output_dir / "ocr.txt").write_text("\n".join(ocr.rows), encoding="utf-8")
-    metadata["transcription"] = {"status": "skipped", "reason": "image note has no speech"}
-    metadata.update({"image_count": len(note.image_urls), "live_photo_count": note.live_photo_count, "ocr_lines": len(ocr.rows)})
+    return {
+        "transcription": {"status": "skipped", "reason": "image note has no speech"},
+        "image_count": len(image_paths),
+        "ocr_lines": len(ocr.rows),
+    }
 
 
 def write_caption(note: Note, output_dir: Path) -> None:

@@ -1,0 +1,101 @@
+"""Live regression: extract the known test notes from Xiaohongshu and check the results.
+
+Run this before merging changes to the extractor. It needs network access and takes
+several minutes because two of the notes are videos.
+
+    python scripts/regression.py            # all notes
+    python scripts/regression.py 9mo7le3NAf # one note
+
+Exit codes: 0 all passed, 1 at least one check failed, 2 no failures but some links
+were unavailable (the note was removed, went private, or the network failed).
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import shutil
+import sys
+import tempfile
+from pathlib import Path
+
+import extract_note
+
+EXPECTATIONS_FILE = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "regression_links.json"
+UNAVAILABLE_MARKERS = ("unavailable", "timed out", "urlopen error", "getaddrinfo", "connection", "http error 4", "http error 5")
+
+
+def load_expectations() -> list[dict]:
+    return json.loads(EXPECTATIONS_FILE.read_text(encoding="utf-8"))
+
+
+def check_expectations(expected: dict, metadata: dict, output_dir: Path) -> list[str]:
+    """Compare one extraction against its expectations; return human-readable failures."""
+    failures = []
+
+    def read(name: str) -> str:
+        path = output_dir / name
+        return path.read_text(encoding="utf-8") if path.exists() else ""
+
+    for key in ("note_type", "author", "title", "image_count", "live_photo_count"):
+        if key in expected and metadata.get(key) != expected[key]:
+            failures.append(f"{key}: expected {expected[key]!r}, got {metadata.get(key)!r}")
+    if "has_audio" in expected and (metadata.get("video") or {}).get("has_audio") != expected["has_audio"]:
+        failures.append(f"has_audio: expected {expected['has_audio']}, got {(metadata.get('video') or {}).get('has_audio')}")
+
+    transcription = metadata.get("transcription") or {}
+    if "speech_warning" in expected and ("warning" in transcription) != expected["speech_warning"]:
+        failures.append(f"speech_warning: expected {expected['speech_warning']}, transcription={transcription}")
+    if "min_transcript_lines" in expected and (transcription.get("lines") or 0) < expected["min_transcript_lines"]:
+        failures.append(f"transcript lines: expected >= {expected['min_transcript_lines']}, got {transcription.get('lines')}")
+
+    for file_name, key in (("caption.txt", "caption_contains"), ("ocr.txt", "ocr_contains"), ("transcript.txt", "transcript_contains")):
+        text = read(file_name).replace(" ", "")
+        for needle in expected.get(key, []):
+            if needle.replace(" ", "") not in text:
+                failures.append(f"{file_name} does not contain {needle!r}")
+    return failures
+
+
+def run_one(expected: dict, keep: Path | None) -> tuple[str, list[str]]:
+    output_dir = (keep / expected["code"]) if keep else Path(tempfile.mkdtemp(prefix=f"xhs-regression-{expected['code']}-"))
+    try:
+        code = extract_note.main([expected["url"], "--output", str(output_dir)])
+        metadata = json.loads((output_dir / "metadata.json").read_text(encoding="utf-8"))
+        if code != 0:
+            error = str(metadata.get("error", ""))
+            status = "UNAVAILABLE" if any(marker in error.lower() for marker in UNAVAILABLE_MARKERS) else "FAIL"
+            return status, [f"extraction failed: {error}"]
+        failures = check_expectations(expected, metadata, output_dir)
+        return ("FAIL" if failures else "PASS"), failures
+    finally:
+        if not keep:
+            shutil.rmtree(output_dir, ignore_errors=True)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Run the live extraction regression.")
+    parser.add_argument("codes", nargs="*", help="Short codes to run (default: all)")
+    parser.add_argument("--keep", type=Path, help="Keep outputs in this directory instead of a temp directory")
+    args = parser.parse_args(argv)
+
+    expectations = [item for item in load_expectations() if not args.codes or item["code"] in args.codes]
+    statuses = []
+    for expected in expectations:
+        print(f"--- {expected['code']}: {expected['covers']}", flush=True)
+        status, failures = run_one(expected, args.keep)
+        statuses.append(status)
+        print(f"{status} {expected['code']}")
+        for failure in failures:
+            print(f"    {failure}")
+
+    print(f"\n{statuses.count('PASS')} passed, {statuses.count('FAIL')} failed, {statuses.count('UNAVAILABLE')} unavailable")
+    if "FAIL" in statuses:
+        return 1
+    return 2 if "UNAVAILABLE" in statuses else 0
+
+
+if __name__ == "__main__":
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    raise SystemExit(main())

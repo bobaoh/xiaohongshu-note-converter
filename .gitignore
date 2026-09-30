@@ -13,3 +13,7 @@ media/
 *.onnx
 .env
 results/
+# Real notes cached for offline tests belong to their authors: never commit them.
+tests/fixtures/local/
+# Synthetic test media is original content and is committed on purpose.
+!tests/fixtures/synthetic/*

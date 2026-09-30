@@ -50,6 +50,7 @@ def test_speech_video_is_transcribed(analyzed):
     assert result["meta"]["video"]["has_audio"] is True
     assert transcription["status"] == "complete"
     assert transcription["language"] == "zh"
+    assert transcription["model_revision"] == extract_note.WHISPER_REVISIONS.get(transcription["model"])
     assert "warning" not in transcription, result["transcript"]
     for keyword in ("32", "70", "微波"):
         assert keyword in result["transcript"], result["transcript"]

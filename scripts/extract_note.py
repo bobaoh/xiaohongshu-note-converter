@@ -268,11 +268,24 @@ def load_wav(path: Path):
     return np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
 
 
+# Pinned Hugging Face revisions of the Systran/faster-whisper-* models, so an upstream model
+# update cannot silently change transcripts. Update together with requirements.lock.
+WHISPER_REVISIONS = {
+    "tiny": "d90ca5fe260221311c53c58e660288d3deb8d356",
+    "base": "ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66",
+    "small": "536b0662742c02347bc0e980a01041f333bce120",
+    "medium": "08e178d48790749d25932bbc082711ddcfdfbc4f",
+    "large-v3": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+}
+
+
 def transcribe(audio_path: Path, output_path: Path) -> dict[str, object]:
     from faster_whisper import WhisperModel
 
     model_name = os.environ.get("WHISPER_MODEL", "small")
-    model = WhisperModel(model_name, device="cpu", compute_type="int8")
+    # Other model names or local paths are allowed; they load the latest (unpinned) revision.
+    revision = os.environ.get("WHISPER_MODEL_REVISION") or WHISPER_REVISIONS.get(model_name)
+    model = WhisperModel(model_name, device="cpu", compute_type="int8", revision=revision)
     segments, info = model.transcribe(load_wav(audio_path), vad_filter=True, beam_size=5)
     texts = []
     with output_path.open("w", encoding="utf-8") as output:
@@ -284,6 +297,7 @@ def transcribe(audio_path: Path, output_path: Path) -> dict[str, object]:
     result: dict[str, object] = {
         "status": "complete",
         "model": model_name,
+        "model_revision": revision,
         "language": info.language,
         "language_probability": info.language_probability,
         "lines": len(texts),

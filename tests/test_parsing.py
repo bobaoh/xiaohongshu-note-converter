@@ -157,6 +157,15 @@ def write_wav(path, rate=16000, channels=1, samples=(0, 16384, -32768)):
         wav.writeframes(b"".join(struct.pack("<h", value) for value in samples) * channels)
 
 
+def test_whisper_revisions_are_pinned_commit_ids():
+    import re
+
+    for model in ("tiny", "small"):  # the test default and the production default
+        assert model in extract_note.WHISPER_REVISIONS
+    for model, revision in extract_note.WHISPER_REVISIONS.items():
+        assert re.fullmatch(r"[0-9a-f]{40}", revision), f"{model}: {revision!r} is not a commit ID"
+
+
 def test_load_wav_returns_float_samples(tmp_path):
     write_wav(tmp_path / "a.wav")
     samples = extract_note.load_wav(tmp_path / "a.wav")

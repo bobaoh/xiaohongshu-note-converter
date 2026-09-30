@@ -8,7 +8,7 @@
 
 你需要：
 
-- **Python 3.11 或更高版本**
+- **Python 3.11 到 3.14**（CI 测试过的版本范围）
 - **[Claude Code](https://claude.com/claude-code)**
 - **FFmpeg**：Windows 用户由安装脚本自动安装
 - 约 **1GB 磁盘空间**，用于 Whisper 语音模型和 OCR 模型
@@ -31,7 +31,7 @@ git clone https://github.com/bobaoh/xiaohongshu-note-converter.git
 cd xiaohongshu-note-converter
 brew install ffmpeg            # macOS
 # sudo apt install ffmpeg      # Ubuntu / Debian
-python3 -m pip install -r requirements.txt
+python3 -m pip install -r requirements.txt -c requirements.lock
 ```
 
 ## 2. 使用

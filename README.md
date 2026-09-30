@@ -17,7 +17,7 @@ Speech recognition and OCR run locally. Audio is not sent to a third-party servi
 ## Requirements
 
 - Windows 10/11
-- Python 3.11+
+- Python 3.11 to 3.14 (tested in CI)
 - FFmpeg
 - Claude Code (for the skill workflow)
 - A public, user-authorized Xiaohongshu/RedNote link
@@ -31,7 +31,19 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\scripts\setup-windows.ps1
 ```
 
-The setup installs FFmpeg and the Python packages in `requirements.txt`. The first transcription run downloads the Whisper model selected by `WHISPER_MODEL` (default: `small`).
+The setup installs FFmpeg and the Python packages at the exact versions in `requirements.lock`. The first transcription run downloads the Whisper model selected by `WHISPER_MODEL` (default: `small`).
+
+## Tested versions
+
+| Component | How it is pinned | Tested |
+|---|---|---|
+| Python packages, including indirect dependencies | `requirements.lock`, used as a pip constraints file. `requirements.txt` keeps the allowed ranges. | CI on every push |
+| Newest allowed packages | Not pinned: an early warning only | Weekly `latest dependencies` workflow |
+| Whisper model files | `WHISPER_REVISIONS` in `scripts/extract_note.py` (Hugging Face commit IDs) | CI (tiny), local tests (small) |
+| Python | 3.11 to 3.14 | CI: 3.11 and 3.14 on Ubuntu, 3.14 on Windows |
+| FFmpeg | Not pinned; only basic, long-stable options are used | CI: Ubuntu's FFmpeg 6.1 and Chocolatey's build on Windows. Locally: 9.0. |
+
+`rapidocr-onnxruntime` 1.3 and later declare support only for Python below 3.13. On Python 3.13 and 3.14 the lock falls back to 1.2.3, which passes the same tests.
 
 ## Use in Claude Code
 
@@ -104,7 +116,7 @@ Codex and other agents that read `AGENTS.md` are pointed to the same skill rules
 ## Testing
 
 ```powershell
-python -m pip install -r requirements-dev.txt
+python -m pip install -r requirements-dev.txt -c requirements.lock
 python -m pytest                          # offline: unit tests + synthetic media (~1 min), also run by CI
 python tests/fixtures/fetch_local.py      # once: cache the real regression notes locally
 python -m pytest -m local                 # offline: rerun on the cached real notes (~8 min)

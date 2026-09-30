@@ -7,32 +7,54 @@ on:
 
 jobs:
   offline:
-    # Unit tests plus the synthetic-media tests (FFmpeg, OCR, Whisper tiny).
+    # Layer 1: unit tests plus the synthetic-media tests (FFmpeg, OCR, Whisper tiny), installed
+    # from requirements.lock so this checks exactly the versions users get.
     # Tests marked `local` need real notes cached on a developer machine and are skipped here.
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    name: offline (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, python: "3.11"}  # oldest supported
+          - {os: ubuntu-latest, python: "3.14"}  # newest supported
+          - {os: windows-latest, python: "3.14"} # most users run Windows
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python }}
           cache: pip
-          cache-dependency-path: requirements*.txt
+          cache-dependency-path: requirements*.*
 
-      - name: Install FFmpeg and OpenCV system libraries
+      - name: Install FFmpeg and OpenCV system libraries (Linux)
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg libgl1 libglib2.0-0
 
-      - name: Install Python dependencies
-        run: python -m pip install -r requirements-dev.txt
+      - name: Install FFmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg -y --no-progress
 
-      - name: Cache the Whisper tiny model
-        uses: actions/cache@v4
+      - name: Install Python dependencies from the lock file
+        run: python -m pip install -r requirements-dev.txt -c requirements.lock
+
+      - name: Show tool versions
+        run: |
+          python --version
+          ffmpeg -version
+          python -m pip freeze
+
+      - name: Cache the pinned Whisper tiny model
+        uses: actions/cache@v6
         with:
           path: ~/.cache/huggingface
-          key: whisper-tiny-v1
+          # Keep in sync with WHISPER_REVISIONS["tiny"] in scripts/extract_note.py.
+          key: whisper-tiny-d90ca5fe-${{ runner.os }}
 
       - name: Run tests
         env:
           TEST_WHISPER_MODEL: tiny
+          HF_HUB_DISABLE_SYMLINKS_WARNING: "1"
         run: python -m pytest -v

@@ -58,13 +58,19 @@ There are three layers. Run them in this order, and report which ones you ran an
 | Layer | Command | When | Time |
 |---|---|---|---|
 | 1. Offline | `python -m pytest` | After every code or format change. CI also runs it on every push. | ~1 min |
-| 2. Cached real notes | `python -m pytest -m local` | Before merging any change to `scripts/extract_note.py` | ~8 min |
+| 2a. Cached real pages | `python -m pytest -m "local and not slow"` | After any change to page parsing in `scripts/extract_note.py` | < 1 s |
+| 2b. Cached real media | `python -m pytest -m local` | Before merging changes to OCR, transcription, FFmpeg calls (`analyze_video`, `analyze_images`, `OcrCollector`, `transcribe`, `load_wav`), `WHISPER_REVISIONS`, or dependencies | 7–11 min |
 | 3. Live regression | `python scripts/regression.py` | Before merging extractor changes, and when Xiaohongshu may have changed its pages | ~8 min, needs network |
 
 - **Layer 1** has two parts:
   - Unit tests for parsing and validation. They use synthetic pages built in `tests/conftest.py`.
   - Media tests. They run FFmpeg, OCR, and Whisper `tiny` on original synthetic media in `tests/fixtures/synthetic/`.
-- **Layer 2** reruns the full analysis on real notes cached in `tests/fixtures/local/`. Create the cache once with `python tests/fixtures/fetch_local.py`. Tests for notes that are not cached are skipped, so a skip is not a pass. Say so if the cache is missing.
+- **Layer 2** uses real notes cached in `tests/fixtures/local/`. Create the cache once with `python tests/fixtures/fetch_local.py`. Tests for notes that are not cached are skipped, so a skip is not a pass. Say so if the cache is missing.
+  - The fast part (2a) parses the cached pages.
+  - The slow part (2b, marked `slow`) reruns OCR and transcription. About 85% of its time is OCR: roughly 1.8 s per video frame and 5–7 s per post image.
+- **OCR speed.** Before changing OCR settings to speed things up, compare the recognized text on every cached frame and image, not a sample.
+  - Tried and rejected: running OCR in several processes gives no speedup, because onnxruntime already uses every core.
+  - Tried and rejected: `det_limit_type=max` with `det_limit_side_len=960` is 19% faster, but it merges ingredient lines and drops text.
 - **Layer 3** exit code 2 means some links were unavailable, not that the code is broken. Report it; do not change the expectations to make it pass.
 - Expectations for layers 2 and 3 live in `tests/fixtures/regression_links.json`. Change an expectation only when the note itself changed, and say why.
 - When you fix a bug, add a test that fails without the fix.

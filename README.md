@@ -124,7 +124,8 @@ Codex and other agents that read `AGENTS.md` are pointed to the same skill rules
 python -m pip install -r requirements-dev.txt -c requirements.lock
 python -m pytest                          # offline: unit tests + synthetic media (~1 min), also run by CI
 python tests/fixtures/fetch_local.py      # once: cache the real regression notes locally
-python -m pytest -m local                 # offline: rerun on the cached real notes (~8 min)
+python -m pytest -m "local and not slow"  # offline: parse the cached real pages (< 1 s)
+python -m pytest -m local                 # offline: also rerun OCR and transcription on them (7-11 min)
 python scripts/regression.py              # online: extract the regression notes live (~8 min)
 ```
 

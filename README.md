@@ -43,7 +43,12 @@ The setup installs FFmpeg and the Python packages at the exact versions in `requ
 | Python | 3.11 to 3.14 | CI: 3.11 and 3.14 on Ubuntu, 3.14 on Windows |
 | FFmpeg | Not pinned; only basic, long-stable options are used | CI: Ubuntu's FFmpeg 6.1 and Chocolatey's build on Windows. Locally: 9.0. |
 
-`rapidocr-onnxruntime` 1.3 and later declare support only for Python below 3.13. On Python 3.13 and 3.14 the lock falls back to 1.2.3, which passes the same tests.
+A few packages resolve differently by Python version, so the lock pins each variant with an environment marker:
+
+- `rapidocr-onnxruntime` 1.3 and later only support Python below 3.13, so Python 3.13 and 3.14 use 1.2.3.
+- `av` 19 and `numpy` 2.5 need Python 3.12 or later, so Python 3.11 uses `av` 18.1 and `numpy` 2.4.
+
+CI tests every one of these variants.
 
 ## Use in Claude Code
 

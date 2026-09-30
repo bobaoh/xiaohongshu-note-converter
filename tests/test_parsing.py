@@ -146,6 +146,30 @@ def test_speech_warning(probability, texts, warns):
     assert (speech_warning(probability, texts) is not None) is warns
 
 
+def write_wav(path, rate=16000, channels=1, samples=(0, 16384, -32768)):
+    import struct
+    import wave
+
+    with wave.open(str(path), "wb") as wav:
+        wav.setnchannels(channels)
+        wav.setsampwidth(2)
+        wav.setframerate(rate)
+        wav.writeframes(b"".join(struct.pack("<h", value) for value in samples) * channels)
+
+
+def test_load_wav_returns_float_samples(tmp_path):
+    write_wav(tmp_path / "a.wav")
+    samples = extract_note.load_wav(tmp_path / "a.wav")
+    assert samples.dtype.name == "float32"
+    assert samples.tolist() == [0.0, 0.5, -1.0]
+
+
+def test_load_wav_rejects_unexpected_formats(tmp_path):
+    write_wav(tmp_path / "stereo.wav", rate=44100, channels=2)
+    with pytest.raises(RuntimeError, match="16 kHz mono"):
+        extract_note.load_wav(tmp_path / "stereo.wav")
+
+
 def test_write_caption_includes_title_author_and_tags(tmp_path):
     data = image_note_data()
     note = note_from_page(note_url(data), make_page(data))

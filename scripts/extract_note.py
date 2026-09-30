@@ -250,12 +250,30 @@ def probe_streams(video_path: Path) -> dict[str, object]:
     return {"has_audio": "audio" in types, "duration": float((info.get("format") or {}).get("duration") or 0)}
 
 
+def load_wav(path: Path):
+    """Read the 16 kHz mono PCM WAV written by FFmpeg as float32 samples.
+
+    Passing samples instead of a file path keeps faster-whisper from decoding the file with
+    PyAV, whose API changes between releases (PyAV 19 removed an argument that
+    faster-whisper 1.2.1 still passes).
+    """
+    import wave
+
+    import numpy as np
+
+    with wave.open(str(path), "rb") as wav:
+        if (wav.getframerate(), wav.getnchannels(), wav.getsampwidth()) != (16000, 1, 2):
+            raise RuntimeError(f"Expected 16 kHz mono 16-bit audio, got {wav.getparams()}")
+        frames = wav.readframes(wav.getnframes())
+    return np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+
+
 def transcribe(audio_path: Path, output_path: Path) -> dict[str, object]:
     from faster_whisper import WhisperModel
 
     model_name = os.environ.get("WHISPER_MODEL", "small")
     model = WhisperModel(model_name, device="cpu", compute_type="int8")
-    segments, info = model.transcribe(audio_path, vad_filter=True, beam_size=5)
+    segments, info = model.transcribe(load_wav(audio_path), vad_filter=True, beam_size=5)
     texts = []
     with output_path.open("w", encoding="utf-8") as output:
         for segment in segments:

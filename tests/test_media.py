@@ -77,6 +77,22 @@ def test_silent_video_skips_transcription(analyzed):
     assert "LivePhoto" in result["ocr"].replace(" ", "")
 
 
+def test_transcription_does_not_depend_on_pyav_decoding(tmp_path, monkeypatch):
+    """PyAV 19 broke faster-whisper's file decoding; we decode the WAV ourselves instead."""
+    import av
+
+    def broken_open(*args, **kwargs):
+        raise TypeError("PyAV decoding must not be used")
+
+    monkeypatch.setattr(av, "open", broken_open)
+    audio = tmp_path / "audio.wav"
+    extract_note.run_ffmpeg(["-y", "-i", str(SYNTHETIC / "speech.mp4"), "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(audio)])
+
+    result = extract_note.transcribe(audio, tmp_path / "transcript.txt")
+
+    assert result["status"] == "complete" and result["lines"] >= 1
+
+
 def test_invalid_video_file_is_rejected(tmp_path):
     fake = tmp_path / "video.mp4"
     fake.write_bytes(b"<html>login required</html>")

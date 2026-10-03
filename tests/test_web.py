@@ -156,6 +156,17 @@ def test_decode_html_handles_chinese_encodings(body, content_type):
     assert "番茄炒蛋" in web.decode_html(body, content_type)
 
 
+@pytest.mark.parametrize(
+    ("text", "charset"),
+    [("臺灣滷肉飯的做法", "big5"), ("肉じゃがの作り方", "shift_jis")],
+)
+def test_decode_html_follows_the_meta_charset(text, charset):
+    """Without the <meta> charset these pages would fall through to GB18030 and decode to
+    garbage without any error, so the declared charset must win."""
+    body = f'<html><head><meta charset="{charset}"></head><body><p>{text}</p></body></html>'.encode(charset)
+    assert text in web.decode_html(body, "text/html")
+
+
 def test_non_html_links_are_rejected_clearly(monkeypatch):
     monkeypatch.setattr(net, "fetch", lambda *a, **k: net.Response("https://x.com/a.pdf", "application/pdf", b"%PDF"))
     with pytest.raises(RuntimeError, match="not a web page"):

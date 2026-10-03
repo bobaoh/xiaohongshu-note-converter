@@ -23,5 +23,5 @@ python -m pip install -r (Join-Path $root 'requirements.txt') -c (Join-Path $roo
 
 Write-Host ''
 Write-Host 'Setup complete.'
-Write-Host 'In Claude Code, run: /xhs-note <PUBLIC_XHS_LINK> [format]'
-Write-Host 'Or extract directly: python .\scripts\extract_note.py "<PUBLIC_XHS_LINK>" --output .\output\<name>'
+Write-Host 'In Claude Code, run: /note <LINK> [format]   (a Xiaohongshu note or any web page)'
+Write-Host 'Or extract directly: python .\scripts\extract.py "<LINK>"'

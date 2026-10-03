@@ -50,7 +50,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/huggingface
-          # Keep in sync with WHISPER_REVISIONS["tiny"] in scripts/extract_note.py.
+          # Keep in sync with WHISPER_REVISIONS["tiny"] in notekit/media.py.
           key: whisper-tiny-d90ca5fe-${{ runner.os }}
 
       - name: Run tests

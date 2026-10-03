@@ -5,3 +5,7 @@ rapidocr_onnxruntime>=1.2.3,<2
 opencv-python>=4.10.0
 Pillow>=10.0.0
 numpy>=1.24
+# Web pages (notekit/sources/web.py). lxml_html_clean is listed because jusText needs it
+# and it is not pulled in on every Python version.
+trafilatura>=2.0,<3
+lxml_html_clean>=0.4

@@ -1,10 +1,13 @@
 # 使用说明（Codex 版）
 
-把小红书帖子（视频或图文）整理成结构化的 Markdown + JSON 文档，比如菜谱、旅行攻略、好物测评、教程、通用摘要，或者你自己定义的格式。
+把链接整理成结构化的 Markdown + JSON 文档，比如菜谱、旅行攻略、好物测评、教程、通用摘要，或者你自己定义的格式。支持：
 
-所有处理都在你的电脑上完成：语音识别和文字识别（OCR）都在本地运行，视频和音频不会上传到第三方服务。
+- **小红书帖子**：视频帖和图文帖
+- **任意网页**：文章、博客、菜谱网站、百科、文档
 
-> 在仓库根目录启动 Codex 时，它会自动读取 `AGENTS.md`。`AGENTS.md` 会让 Codex 去读 `.claude/skills/xhs-note/SKILL.md` 里的整理规则，这份规则和 Claude Code 版共用，所以两个工具的输出格式和规则完全一致。
+所有处理都在你的电脑上完成：语音识别和文字识别（OCR）都在本地运行，视频、音频和图片不会上传到第三方服务。每次转换都会记录花费的时间和资源，成本高的会被标出来。
+
+> 在仓库根目录启动 Codex 时，它会自动读取 `AGENTS.md`。`AGENTS.md` 会让 Codex 去读 `.claude/skills/note/SKILL.md` 里的整理规则，这份规则和 Claude Code 版共用，所以两个工具的输出格式和规则完全一致。
 
 ## 1. 准备（只需一次）
 
@@ -64,19 +67,20 @@ codex
 
 ```
 http://xhslink.com/o/xxxx 整理成旅行攻略
-http://xhslink.com/o/xxxx recipe
+https://example.com/某篇菜谱 recipe                （任意网页）
 http://xhslink.com/o/xxxx                       （不写格式，自动选择）
-http://xhslink.com/o/xxxx 店名、地址、人均、推荐菜    （临时描述你想要的字段）
+https://example.com/某篇游记 店名、地址、人均、推荐菜  （临时描述你想要的字段）
 把刚才那篇换成 tutorial 格式                       （复用已提取的内容，不重新下载）
 ```
 
 如果 Codex 没有按规则处理，比如没生成结果文件、没做校验，就在消息开头加一句"按 AGENTS.md 的流程处理"。
 
 Codex 会依次完成这些步骤：
-1. 运行 `scripts/extract_note.py` 提取素材。
+1. 运行 `scripts/extract.py` 提取素材，它会自动识别是小红书还是普通网页。
 2. 读取 `.claude/skills/xhs-note/formats/` 下对应的格式文件。
 3. 写出结果文件。
 4. 运行 `scripts/validate_result.py` 校验结果。
+5. 如果这次转换成本高，在回复里说明原因。
 
 ## 3. 可用格式
 
@@ -92,9 +96,11 @@ Codex 会依次完成这些步骤：
 
 | 位置 | 内容 |
 |---|---|
-| `results/<帖子ID>-<格式>.md` | 整理好的文档，可以直接阅读 |
-| `results/<帖子ID>-<格式>.json` | 同样内容的结构化数据，方便导入其他工具 |
-| `output/<短码>/` | 提取的原始素材：正文、语音转写、OCR 文字和图片 |
+| `results/<ID>-<格式>.md` | 整理好的文档，可以直接阅读 |
+| `results/<ID>-<格式>.json` | 同样内容的结构化数据，方便导入其他工具 |
+| `output/<短码>/` | 小红书帖子提取的原始素材：正文、语音转写、OCR 文字和图片 |
+| `output/web/<ID>/` | 网页提取的原始素材：正文、图片和图片里的文字 |
+| `logs/conversions.jsonl` | 每次转换的成本记录 |
 
 结果里会标出：
 - 每部分内容来自哪里（正文、字幕、语音还是图片）
@@ -111,7 +117,16 @@ Codex 会依次完成这些步骤：
 python scripts/validate_result.py results/<帖子ID>-<格式>.json
 ```
 
-**关于图文帖的图片：** `SKILL.md` 要求在需要时直接查看 `output/<短码>/media/` 里的图片，比如步骤图、路线图、价目表。如果你的 Codex 看不到本地图片，结果就只能依赖 OCR 文字，图片里没有文字说明的步骤可能会缺失。这种情况下可以请它在 `missing` 里注明。
+**关于图片：** `SKILL.md` 要求在需要时直接查看 `media/` 里的图片，比如步骤图、路线图、价目表。如果你的 Codex 看不到本地图片，结果就只能依赖 OCR 文字，图片里没有文字说明的步骤可能会缺失。这种情况下可以请它在 `missing` 里注明。
+
+**转换成本：** 每次转换的耗时、OCR 数量、AI 要读的内容量都会记录下来，超过 `cost_policy.toml` 的阈值会被标为成本高。查看汇总：
+
+```bash
+python scripts/cost_report.py              # 汇总
+python scripts/cost_report.py --expensive  # 只看成本高的
+```
+
+网页一般 1–8 秒，小红书图文帖约 30 秒，2 分钟的视频约 3 分钟（大部分时间花在视频截图的 OCR 上）。
 
 ## 5. 添加自己的格式
 
@@ -135,7 +150,13 @@ python scripts/validate_result.py results/<帖子ID>-<格式>.json
 
 **Codex 没按格式输出，或者跳过了某些规则？**
 - 先确认 Codex 是在仓库根目录启动的，这样才会读到 `AGENTS.md`。
-- 然后提醒它重新阅读 `.claude/skills/xhs-note/SKILL.md` 和对应的格式文件，修正结果并重新校验。
+- 然后提醒它重新阅读 `.claude/skills/note/SKILL.md` 和对应的格式文件，修正结果并重新校验。
+
+**网页提示"No readable content"，或者结果里说正文很少？**
+这个网页可能要靠 JavaScript 加载内容、需要登录，或者拒绝自动访问。这个工具只读取直接打开就能看到的公开内容。
+
+**网页里的视频没有被整理进去？**
+目前只处理网页的文字和图片。页面里嵌入的视频会列在结果里，但不会转写。
 
 **转写结果只有 "You" 或者一堆繁体错字？**
 - 只有 "You"：说明视频只有背景音乐，应改用屏幕字幕。
@@ -148,6 +169,6 @@ python scripts/validate_result.py results/<帖子ID>-<格式>.json
 
 ## 7. 注意事项
 
-- 只处理你有权访问的公开帖子。
+- 只处理你有权访问的公开帖子和网页。
 - 不要把 cookie、登录二维码、账号密码交给脚本或 AI。
 - 整理出的内容版权属于原作者。分享时请注明出处，不要当作自己的原创内容发布。

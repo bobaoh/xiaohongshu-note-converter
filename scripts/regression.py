@@ -14,12 +14,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 import tempfile
 from pathlib import Path
 
-import extract_note
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from notekit import pipeline  # noqa: E402
 
 EXPECTATIONS_FILE = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "regression_links.json"
 UNAVAILABLE_MARKERS = ("unavailable", "timed out", "urlopen error", "getaddrinfo", "connection", "http error 4", "http error 5")
@@ -37,11 +40,17 @@ def check_expectations(expected: dict, metadata: dict, output_dir: Path) -> list
         path = output_dir / name
         return path.read_text(encoding="utf-8") if path.exists() else ""
 
-    for key in ("note_type", "author", "title", "image_count", "live_photo_count"):
+    for key in ("source", "note_type", "author", "title", "image_count", "live_photo_count"):
         if key in expected and metadata.get(key) != expected[key]:
             failures.append(f"{key}: expected {expected[key]!r}, got {metadata.get(key)!r}")
     if "has_audio" in expected and (metadata.get("video") or {}).get("has_audio") != expected["has_audio"]:
         failures.append(f"has_audio: expected {expected['has_audio']}, got {(metadata.get('video') or {}).get('has_audio')}")
+
+    if "min_text_chars" in expected and (metadata.get("text_chars") or 0) < expected["min_text_chars"]:
+        failures.append(f"text_chars: expected >= {expected['min_text_chars']}, got {metadata.get('text_chars')}")
+    missing_types = set(expected.get("structured_types", [])) - set(metadata.get("structured_types") or [])
+    if missing_types:
+        failures.append(f"structured_types: missing {sorted(missing_types)}, got {metadata.get('structured_types')}")
 
     transcription = metadata.get("transcription") or {}
     if "speech_warning" in expected and ("warning" in transcription) != expected["speech_warning"]:
@@ -58,11 +67,10 @@ def check_expectations(expected: dict, metadata: dict, output_dir: Path) -> list
 
 
 def run_one(expected: dict, keep: Path | None) -> tuple[str, list[str]]:
-    output_dir = (keep / expected["code"]) if keep else Path(tempfile.mkdtemp(prefix=f"xhs-regression-{expected['code']}-"))
+    output_dir = (keep / expected["code"]) if keep else Path(tempfile.mkdtemp(prefix=f"note-regression-{expected['code']}-"))
     try:
-        code = extract_note.main([expected["url"], "--output", str(output_dir)])
-        metadata = json.loads((output_dir / "metadata.json").read_text(encoding="utf-8"))
-        if code != 0:
+        metadata = pipeline.extract(expected["url"], output_dir)
+        if metadata["status"] != "complete":
             error = str(metadata.get("error", ""))
             status = "UNAVAILABLE" if any(marker in error.lower() for marker in UNAVAILABLE_MARKERS) else "FAIL"
             return status, [f"extraction failed: {error}"]
@@ -78,6 +86,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("codes", nargs="*", help="Short codes to run (default: all)")
     parser.add_argument("--keep", type=Path, help="Keep outputs in this directory instead of a temp directory")
     args = parser.parse_args(argv)
+    os.environ.setdefault("NOTE_COST_CONTEXT", "regression")
 
     expectations = [item for item in load_expectations() if not args.codes or item["code"] in args.codes]
     statuses = []

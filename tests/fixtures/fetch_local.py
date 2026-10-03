@@ -16,20 +16,58 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT))
+
+import shutil  # noqa: E402
+import tempfile  # noqa: E402
 
 import extract_note  # noqa: E402
+from notekit import source_for  # noqa: E402
+from notekit.cost import load_policy  # noqa: E402
+from notekit.sources import web  # noqa: E402
 from regression import load_expectations  # noqa: E402
 
 LOCAL = Path(__file__).resolve().parent / "local"
 
 
 def fetch(expected: dict) -> None:
+    if source_for(expected["url"]).name == "web":
+        fetch_web(expected)
+    else:
+        fetch_xiaohongshu(expected)
+
+
+def fetch_web(expected: dict) -> None:
+    """Cache the page and the images the web source would keep (after size filtering)."""
+    target = LOCAL / expected["code"]
+    images = target / "images"
+    images.mkdir(parents=True, exist_ok=True)
+    resolved_url, page_html = web.fetch(expected["url"])
+    (target / "page.html").write_text(page_html, encoding="utf-8")
+    (target / "source.json").write_text(
+        json.dumps({"input_url": expected["url"], "resolved_url": resolved_url, "source": "web"}), encoding="utf-8"
+    )
+    policy = load_policy()["web"]
+    page = web.page_from_html(resolved_url, page_html)
+    work = Path(tempfile.mkdtemp())
+    saved = 0
+    for url, _ in page.images[: policy["max_images"]]:
+        destination = images / f"image-{saved + 1:02d}.jpg"
+        if web.save_image(url, resolved_url, work, destination, policy["min_image_side"]) == "saved":
+            saved += 1
+    shutil.rmtree(work, ignore_errors=True)
+    print(f"{expected['code']}: web, {len(page.text)} chars, {saved} images")
+
+
+def fetch_xiaohongshu(expected: dict) -> None:
     target = LOCAL / expected["code"]
     target.mkdir(parents=True, exist_ok=True)
     resolved_url, page = extract_note.fetch_page(expected["url"])
     note = extract_note.note_from_page(resolved_url, page)
     (target / "page.html").write_text(page, encoding="utf-8")
-    (target / "source.json").write_text(json.dumps({"input_url": expected["url"], "resolved_url": resolved_url}), encoding="utf-8")
+    (target / "source.json").write_text(
+        json.dumps({"input_url": expected["url"], "resolved_url": resolved_url, "source": "xiaohongshu"}), encoding="utf-8"
+    )
 
     if note.note_type == "video":
         extract_note.download_first(note.video_urls, target / "video.mp4", resolved_url)

@@ -144,3 +144,8 @@ def test_every_format_json_example_matches_its_field_table(format_file, tmp_path
     errors, warnings = run(tmp_path, result)
     assert errors == [], errors
     assert not [warning for warning in warnings if "未定义的字段" in warning], warnings
+
+
+def test_structured_data_is_an_allowed_source(tmp_path):
+    """Web pages can publish schema.org data (structured.json); results may cite it."""
+    assert run(tmp_path, mutated(sources_used=["caption", "structured"]))[0] == []

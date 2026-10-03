@@ -1,18 +1,24 @@
-# Xiaohongshu Note Converter
+# Note Converter
 
-Turn a public Xiaohongshu/RedNote note into a structured Markdown + JSON document in any format you define: a recipe, a summary, a travel guide, a product review, a tutorial, or your own.
+Turn a link into a structured Markdown + JSON document in any format you define: a recipe, a summary, a travel guide, a product review, a tutorial, or your own. Supported links:
+
+- Xiaohongshu / RedNote notes: video and image posts
+- any ordinary web page: articles, blogs, recipe sites, documentation
+
+Every conversion records what it cost, and expensive ones are flagged.
 
 **中文使用说明：** [Claude Code 版](HUMAN_INSTRUCTIONS(ClaudeCode).md) · [Codex 版](HUMAN_INSTRUCTIONS(Codex).md)
 
-The design has three layers:
+The design has four layers:
 
 | Layer | Location | Role |
 |---|---|---|
-| Extraction | `scripts/extract_note.py` | Detects video vs image notes and saves the caption, speech transcript, OCR text, and images. It does not depend on the output format. |
-| Rules | `.claude/skills/xhs-note/SKILL.md` | The workflow and cleanup rules shared by every format: source priority, uncertainty markers, and the JSON envelope. |
-| Formats | `.claude/skills/xhs-note/formats/*.md` | One file per output format. Add a file to add a format; no code changes needed. |
+| Extraction | `notekit/` and `scripts/extract.py` | One module per kind of link in `notekit/sources/`. Each saves the same files: the text, speech transcript, OCR text, images, and metadata. It does not depend on the output format. |
+| Source notes | `.claude/skills/note/sources/*.md` | What the formatting step should know about each kind of link. |
+| Rules | `.claude/skills/note/SKILL.md` | The workflow and cleanup rules shared by every source and format: source priority, uncertainty markers, cost handling, and the JSON envelope. |
+| Formats | `.claude/skills/xhs-note/formats/*.md` | One file per output format, shared by all sources. Add a file to add a format; no code changes needed. |
 
-Speech recognition and OCR run locally. Audio is not sent to a third-party service.
+Speech recognition and OCR run locally. Audio and images are not sent to a third-party service.
 
 ## Requirements
 
@@ -20,7 +26,7 @@ Speech recognition and OCR run locally. Audio is not sent to a third-party servi
 - Python 3.11 to 3.14 (tested in CI)
 - FFmpeg
 - Claude Code (for the skill workflow)
-- A public, user-authorized Xiaohongshu/RedNote link
+- A public, user-authorized link
 
 ## Setup on Windows
 
@@ -33,44 +39,34 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 The setup installs FFmpeg and the Python packages at the exact versions in `requirements.lock`. The first transcription run downloads the Whisper model selected by `WHISPER_MODEL` (default: `small`).
 
-## Tested versions
-
-| Component | How it is pinned | Tested |
-|---|---|---|
-| Python packages, including indirect dependencies | `requirements.lock`, used as a pip constraints file. `requirements.txt` keeps the allowed ranges. | CI on every push |
-| Newest allowed packages | Not pinned: an early warning only | Weekly `latest dependencies` workflow |
-| Whisper model files | `WHISPER_REVISIONS` in `scripts/extract_note.py` (Hugging Face commit IDs) | CI (tiny), local tests (small) |
-| Python | 3.11 to 3.14 | CI: 3.11 and 3.14 on Ubuntu, 3.14 on Windows |
-| FFmpeg | Not pinned; only basic, long-stable options are used | CI: Ubuntu's FFmpeg 6.1 and Chocolatey's build on Windows. Locally: 9.0. |
-
-A few packages resolve differently by Python version, so the lock pins each variant with an environment marker:
-
-- `rapidocr-onnxruntime` 1.3 and later only support Python below 3.13, so Python 3.13 and 3.14 use 1.2.3.
-- `av` 19 and `numpy` 2.5 need Python 3.12 or later, so Python 3.11 uses `av` 18.1 and `numpy` 2.4.
-
-CI tests every one of these variants.
-
 ## Use in Claude Code
 
 Open Claude Code in this folder:
 
 ```
-/xhs-note http://xhslink.com/o/example                     # pick a format automatically
-/xhs-note http://xhslink.com/o/example recipe              # use a defined format
-/xhs-note http://xhslink.com/o/example 店名、地址、人均、推荐菜  # describe a one-off format
-/xhs-note 把刚才那篇换成 tutorial 格式                        # reuse the extraction
+/note https://example.com/some-recipe                    # any web page; pick a format automatically
+/note http://xhslink.com/o/example recipe                # a Xiaohongshu note in a defined format
+/note https://example.com/travel 店名、地址、人均、推荐菜    # describe a one-off format
+/note 把刚才那篇换成 tutorial 格式                          # reuse the extraction
 ```
 
-Claude extracts the note into `output/<key>/`. If that folder already holds a complete extraction, Claude reuses it. The result is written to `results/<note_id>-<format>.md` and `.json`, then checked with `scripts/validate_result.py`.
+Claude extracts the link, reusing a complete extraction when there is one:
 
-Both `output/` and `results/` are git-ignored because they contain other people's posts. Remove `results/` from `.gitignore` if you want to version your results.
+- Xiaohongshu notes go to `output/<key>/`.
+- Web pages go to `output/web/<id>/`.
+
+The result is written to `results/<note_id>-<format>.md` and `.json`, then checked with `scripts/validate_result.py`. Claude also tells you when the conversion was expensive.
+
+`/xhs-note` is the original Xiaohongshu-only skill. It still works, and the xhs-library project depends on it; use `/note` for new work.
+
+`output/`, `results/`, and `logs/` are git-ignored because they contain other people's content and your own history. Remove `results/` from `.gitignore` if you want to version your results.
 
 ## Formats
 
 | Name | Title | For |
 |---|---|---|
 | `recipe` | 菜谱 | cooking, baking, drinks |
-| `summary` | 通用摘要 | any note; the fallback |
+| `summary` | 通用摘要 | any note or article; the fallback |
 | `travel-guide` | 旅行攻略 | itineraries, places, transport |
 | `product-review` | 好物测评 | product picks, comparisons, hauls |
 | `tutorial` | 教程 | step-by-step how-tos |
@@ -83,11 +79,11 @@ Both `output/` and `results/` are git-ignored because they contain other people'
    - the field table (`字段 | 类型 | 必填 | 说明`)
    - a JSON example
    - a Markdown template and any format-specific rules
-3. Use it with `/xhs-note <link> <name>`.
+3. Use it with `/note <link> <name>`.
 
 You can also describe a format inline. Claude then offers to save it as a new format file for you.
 
-Every result JSON shares one envelope, so results from different formats can be processed the same way:
+Every result JSON shares one envelope, so results from different sources and formats can be processed the same way:
 
 ```json
 {
@@ -100,36 +96,111 @@ Every result JSON shares one envelope, so results from different formats can be 
 }
 ```
 
+## Conversion cost
+
+Every conversion records its cost in `metadata.json` under `cost`, and appends a line to `logs/conversions.jsonl`, including failed conversions. The record contains:
+
+- time per stage
+- download size
+- video length
+- how many frames and images went through OCR
+- an estimate of how much text and how many images the AI formatting step has to read
+- a prediction made before the expensive work starts
+
+A conversion is flagged as expensive when it crosses a threshold in `cost_policy.toml`:
+
+| Flag | Meaning | Default limit |
+|---|---|---|
+| `slow` | Total extraction time | 180 s |
+| `ocr_heavy` | OCR time | 120 s |
+| `transcription_heavy` | Transcription time | 120 s |
+| `long_video` | Video length | 300 s |
+| `many_ocr_items` | Video frames + images OCR'd | 120 |
+| `large_download` | Downloaded data | 100 MB |
+| `large_ai_text` | Text the AI step reads | 20,000 tokens |
+| `many_ai_images` | Images the AI step may view | 30,000 tokens |
+
+```powershell
+python .\scripts\cost_report.py              # flags, where the time goes, cost per source, prediction error
+python .\scripts\cost_report.py --expensive  # only the flagged conversions
+```
+
+Flagging only marks conversions; nothing is refused yet. A limit on expensive conversions can be built on the recorded predictions. For web pages, `[web] max_images` already caps how many images go through OCR.
+
+Typical costs on a Windows laptop:
+
+| Kind of link | Typical cost |
+|---|---|
+| Web page | 1–8 s |
+| Xiaohongshu image note | about 30 s |
+| 2-minute Xiaohongshu video | about 3 min; OCR of video frames is about 85% of that |
+
 ## Run the extractor directly
 
 ```powershell
-python .\scripts\extract_note.py "http://xhslink.com/o/example" --output .\output\example
+python .\scripts\extract.py "https://example.com/article"           # prints the output directory and the cost
+python .\scripts\extract.py "http://xhslink.com/o/example" --where  # only print where it would go
+python .\scripts\extract.py "https://example.com/article" --force   # extract again
 ```
 
 The extractor writes these files:
 
-- `metadata.json`: note ID, type (`video` or `normal`), title, publish date, and processing status
-- `caption.txt`: the author's title, description, and tags
-- `transcript.txt`: the timestamped speech transcript (empty for image notes and silent videos)
-- `ocr.txt`: deduplicated Chinese/English text from video frames or post images
-- `media/`: the note's own images (image notes), or the video, audio, and frames with `--keep-media`
+- `metadata.json`:
+  - `source`, `note_id`, `note_type` (`video`, `normal`, or `article`), title, author, publish date
+  - processing status and `cost`
+  - source-specific fields; see `.claude/skills/note/sources/`
+- `caption.txt`: the author's own text: a post's caption, or a web page's main text with image markers
+- `transcript.txt`: the timestamped speech transcript (empty when there is no speech)
+- `ocr.txt`: deduplicated Chinese/English text from video frames or images
+- `structured.json`: schema.org data a web page publishes, such as recipe ingredients (only when present)
+- `media/`: the images, or the video, audio, and frames with `--keep-media`
 
-`extract_recipe.py` and `extract_post.py` still work as aliases.
+`scripts/extract_note.py` is the original command (`--output <dir> [--keep-media]`), kept unchanged for the xhs-library project. `extract_recipe.py` and `extract_post.py` are aliases.
+
+### Add a kind of link
+
+See the docstring of `notekit/sources/__init__.py` and "Adding a source" in `AGENTS.md`. In short:
+
+1. Write a `Source` subclass.
+2. Register it.
+3. Report its cost.
+4. Add tests and a regression link.
 
 Codex and other agents that read `AGENTS.md` are pointed to the same skill rules automatically. `AGENTS.md` also explains how to use a web chat AI that cannot run commands.
+
+## Tested versions
+
+| Component | How it is pinned | Tested |
+|---|---|---|
+| Python packages, including indirect dependencies | `requirements.lock`, used as a pip constraints file. `requirements.txt` keeps the allowed ranges. | CI on every push |
+| Newest allowed packages | Not pinned: an early warning only | Weekly `latest dependencies` workflow |
+| Whisper model files | `WHISPER_REVISIONS` in `notekit/media.py` (Hugging Face commit IDs) | CI (tiny), local tests (small) |
+| Python | 3.11 to 3.14 | CI: 3.11 and 3.14 on Ubuntu, 3.14 on Windows |
+| FFmpeg | Not pinned; only basic, long-stable options are used | CI: Ubuntu's FFmpeg 6.1 and Chocolatey's build on Windows. Locally: 9.0. |
+
+A few packages resolve differently by Python version, so the lock pins each variant with an environment marker:
+
+- `rapidocr-onnxruntime` 1.3 and later only support Python below 3.13, so Python 3.13 and 3.14 use 1.2.3.
+- `av` 19 and `numpy` 2.5 need Python 3.12 or later, so Python 3.11 uses `av` 18.1 and `numpy` 2.4.
+
+CI tests every one of these variants.
 
 ## Testing
 
 ```powershell
 python -m pip install -r requirements-dev.txt -c requirements.lock
-python -m pytest                          # offline: unit tests + synthetic media (~1 min), also run by CI
-python tests/fixtures/fetch_local.py      # once: cache the real regression notes locally
+python -m pytest                          # offline: unit tests + synthetic media (~2 min), also run by CI
+python tests/fixtures/fetch_local.py      # once: cache the real regression notes and pages locally
 python -m pytest -m "local and not slow"  # offline: parse the cached real pages (< 1 s)
 python -m pytest -m local                 # offline: also rerun OCR and transcription on them (7-11 min)
-python scripts/regression.py              # online: extract the regression notes live (~8 min)
+python scripts/regression.py              # online: extract the regression links live (~8 min)
 ```
 
-The synthetic test media in `tests/fixtures/synthetic/` is original content generated by `tests/fixtures/make_synthetic.py`. Real notes are cached only in the git-ignored `tests/fixtures/local/`, because they belong to their authors. See the Testing section of `AGENTS.md` for when to run each layer.
+- **Synthetic media**: `tests/fixtures/synthetic/` holds original content generated by `tests/fixtures/make_synthetic.py`.
+- **Real notes and pages**: cached only in the git-ignored `tests/fixtures/local/`, because they belong to their authors.
+- **xhs-library**: `tests/test_contract_xhs_library.py` checks the interface the xhs-library project relies on.
+
+See the Testing section of `AGENTS.md` for when to run each layer.
 
 ## Access and copyright
 

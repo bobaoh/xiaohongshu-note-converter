@@ -1,0 +1,34 @@
+# When a conversion counts as expensive, and the factors used to predict cost.
+#
+# Every conversion records its measured cost in metadata.json ("cost") and in the ledger,
+# logs/conversions.jsonl. A conversion is flagged "expensive" when any value below is exceeded.
+# Run `python scripts/cost_report.py` to see which conversions were expensive and why.
+#
+# Flagging only marks conversions; nothing is refused yet. A future limit will be based on the
+# "predicted" values each source records before the heavy work starts.
+
+[thresholds]
+# Extraction, measured on this machine.
+total_seconds = 180        # flag "slow"
+ocr_seconds = 120          # flag "ocr_heavy"
+transcribe_seconds = 120   # flag "transcription_heavy"
+video_seconds = 300        # flag "long_video"
+ocr_items = 120            # flag "many_ocr_items" (video frames + images)
+download_mb = 100          # flag "large_download"
+# The AI formatting step, estimated from what it has to read.
+ai_text_tokens = 20000     # flag "large_ai_text": caption + OCR + transcript
+ai_image_tokens = 30000    # flag "many_ai_images": images the AI may look at
+
+[estimates]
+# Measured on a Windows laptop with Whisper small on CPU, September 2026. Compare "predicted"
+# with actual cost in the cost report and adjust these when they drift.
+seconds_per_ocr_frame = 1.8
+seconds_per_ocr_image = 6.0
+transcribe_seconds_per_audio_second = 0.4
+tokens_per_image = 1600
+
+[web]
+# Ordinary web pages. These bound the cost up front instead of only flagging it afterwards.
+max_images = 8            # images from the main text that are downloaded and OCR'd; the rest are counted as skipped
+min_image_side = 200      # smaller images (icons, avatars, spacers) are not saved
+thin_text_chars = 200     # less main text than this adds a content_warning

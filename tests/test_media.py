@@ -8,6 +8,7 @@ character between model or library versions (for example 微波炉 vs 微波爐)
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -15,6 +16,7 @@ import pytest
 from conftest import SYNTHETIC, image_note_data, make_page, note_url, video_note_data
 
 import extract_note
+import notekit.net
 
 pytestmark = [pytest.mark.media, pytest.mark.usefixtures("require_ffmpeg")]
 
@@ -22,7 +24,7 @@ pytestmark = [pytest.mark.media, pytest.mark.usefixtures("require_ffmpeg")]
 @pytest.fixture(scope="module", autouse=True)
 def tiny_whisper():
     monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setenv("WHISPER_MODEL", extract_note.os.environ.get("TEST_WHISPER_MODEL", "tiny"))
+    monkeypatch.setenv("WHISPER_MODEL", os.environ.get("TEST_WHISPER_MODEL", "tiny"))
     yield
     monkeypatch.undo()
 
@@ -118,13 +120,13 @@ def test_image_cards_are_read_in_order(tmp_path):
 
 
 def fake_network(monkeypatch, page_data: dict, files: list[Path]) -> None:
-    monkeypatch.setattr(extract_note, "fetch_page", lambda url: (note_url(page_data), make_page(page_data)))
+    monkeypatch.setattr(notekit.net, "fetch_page", lambda url: (note_url(page_data), make_page(page_data)))
     queue = list(files)
 
     def fake_download(url, destination, referer):
         shutil.copyfile(queue.pop(0), destination)
 
-    monkeypatch.setattr(extract_note, "download", fake_download)
+    monkeypatch.setattr(notekit.net, "download", fake_download)
 
 
 def run_main(tmp_path: Path) -> tuple[dict, Path]:
@@ -162,7 +164,7 @@ def test_main_video_note_end_to_end(tmp_path, monkeypatch):
 
 
 def test_main_reports_failures_in_metadata(tmp_path, monkeypatch):
-    monkeypatch.setattr(extract_note, "fetch_page", lambda url: ("https://www.xiaohongshu.com/404/sec_x", make_page(None)))
+    monkeypatch.setattr(notekit.net, "fetch_page", lambda url: ("https://www.xiaohongshu.com/404/sec_x", make_page(None)))
     out = tmp_path / "out"
 
     assert extract_note.main(["http://xhslink.com/o/GONE", "--output", str(out)]) == 1

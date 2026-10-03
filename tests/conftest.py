@@ -14,6 +14,7 @@ SYNTHETIC = FIXTURES / "synthetic"
 LOCAL = FIXTURES / "local"
 
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT))
 
 
 def _refresh_windows_path() -> None:
@@ -36,6 +37,15 @@ def _refresh_windows_path() -> None:
 
 
 _refresh_windows_path()
+
+
+@pytest.fixture(autouse=True)
+def isolated_cost_ledger(tmp_path, monkeypatch):
+    """Tests must never write to the real ledger in logs/."""
+    ledger = tmp_path / "conversions.jsonl"
+    monkeypatch.setenv("NOTE_COST_LEDGER", str(ledger))
+    monkeypatch.setenv("NOTE_COST_CONTEXT", "test")
+    return ledger
 
 
 @pytest.fixture

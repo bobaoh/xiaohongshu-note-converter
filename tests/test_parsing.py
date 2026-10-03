@@ -20,7 +20,7 @@ def test_image_note_uses_only_its_own_images_and_counts_live_photos():
     data = image_note_data()
     note = note_from_page(note_url(data), make_page(data))
 
-    assert note.source == "initial_state"
+    assert note.parser == "initial_state"
     assert note.note_type == "normal"
     assert note.note_id == data["noteId"]
     assert len(note.image_urls) == 3
@@ -82,7 +82,7 @@ def test_page_without_state_uses_regex_fallback_and_skips_live_photos():
     )
     note = note_from_page("https://www.xiaohongshu.com/discovery/item/cccccccccccccccccccccccc?type=video", page)
 
-    assert note.source == "regex_fallback"
+    assert note.parser == "regex_fallback"
     assert note.note_type == "video"
     assert note.note_id == "cccccccccccccccccccccccc"
     assert note.video_urls == ["http://sns-video-zl.xhscdn.com/stream/1/110/259/vid_259.mp4?sign=1"]

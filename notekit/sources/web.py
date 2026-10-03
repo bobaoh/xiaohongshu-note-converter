@@ -3,7 +3,8 @@
 The main text comes from trafilatura, which drops navigation, ads, comments, and footers.
 schema.org JSON-LD (Recipe, HowTo, Product, Article, ...) supplies the author when trafilatura
 finds none, and recipe ingredients and steps when the page publishes them. Images inside the
-main text are downloaded, up to ``[web] max_images`` in cost_policy.toml, and OCR'd.
+main text are downloaded, up to ``[web] max_images`` in cost_policy.toml, and OCR'd; images
+smaller than ``min_image_side`` (icons, thumbnails) are dropped. The og:image cover is only recorded.
 
 Not handled here, and left to future sources: pages that need JavaScript or a login, PDFs and
 other non-HTML links, and embedded videos (listed in caption.txt and metadata as unprocessed).
@@ -42,6 +43,9 @@ class WebPage:
     text: str = ""
     #: (absolute URL, alt text) of images in the main text, in reading order.
     images: list[tuple[str, str]] = field(default_factory=list)
+    #: The page's og:image. Only recorded: it is usually a generated preview of the title, so
+    #: OCR on it repeats the text at full OCR cost.
+    cover_image: str = ""
     structured: list[dict] = field(default_factory=list)
     unprocessed_media: list[str] = field(default_factory=list)
 
@@ -200,8 +204,6 @@ def page_from_html(final_url: str, page_html: str) -> WebPage:
         url = urljoin(final_url, src)
         if url.startswith("http") and not url.lower().split("?")[0].endswith(".svg") and url not in [u for u, _ in images]:
             images.append((url, alt.strip()))
-    if not images and meta is not None and meta.image:
-        images.append((urljoin(final_url, meta.image), "封面"))
 
     jsonld_author = next((person_name(node.get("author")) for node in objects if node.get("author")), "")
     meta_author = re.search(r"<meta[^>]+name=[\"']author[\"'][^>]+content=[\"']([^\"']+)", page_html, re.I)
@@ -221,6 +223,7 @@ def page_from_html(final_url: str, page_html: str) -> WebPage:
         images=images,
         structured=objects,
         unprocessed_media=embedded_videos(page_html, final_url),
+        cover_image=urljoin(final_url, meta.image) if meta is not None and meta.image else "",
     )
 
 
@@ -239,8 +242,11 @@ def fetch(url: str) -> tuple[str, str]:
     return response.url, decode_html(response.body, response.content_type)
 
 
-def save_image(url: str, referer: str, work_dir: Path, destination: Path, min_side: int) -> bool:
-    """Download an image and save it as JPEG; False when it fails or is too small to matter."""
+def save_image(url: str, referer: str, work_dir: Path, destination: Path, min_side: int) -> str:
+    """Download an image and save it as JPEG.
+
+    Returns "saved", "small" (icons, avatars, thumbnails: not worth OCR), or "failed".
+    """
     from PIL import Image
 
     raw = work_dir / (destination.stem + ".download")
@@ -248,11 +254,11 @@ def save_image(url: str, referer: str, work_dir: Path, destination: Path, min_si
         net.download(url, raw, referer)
         with Image.open(raw) as image:
             if min(image.size) < min_side:
-                return False
+                return "small"
             image.convert("RGB").save(destination, "JPEG", quality=92)
-        return True
+        return "saved"
     except Exception:
-        return False
+        return "failed"
     finally:
         raw.unlink(missing_ok=True)
 
@@ -312,6 +318,7 @@ class WebSource(Source):
                 "published_at": page.published_at,
                 "author": page.author or None,
                 "site_name": page.site_name or None,
+                "cover_image": page.cover_image or None,
                 "parser": "trafilatura",
                 "text_chars": len(page.text),
                 "images_found": len(page.images),
@@ -324,7 +331,6 @@ class WebSource(Source):
             job.metadata["content_warning"] = (
                 "very little text was found; the page may load its content with JavaScript or hide it behind a login"
             )
-        cost.predict(ocr_images=len(selected), policy=job.policy)
 
         media_dir = job.output_dir / "media"
         media_dir.mkdir(exist_ok=True)
@@ -332,13 +338,20 @@ class WebSource(Source):
             stale.unlink()
         image_names: dict[str, str] = {}
         image_paths: list[Path] = []
+        outcomes: list[str] = []
         with cost.stage("download"):
             for url, _ in selected:
                 destination = media_dir / f"image-{len(image_paths) + 1:02d}.jpg"
-                if save_image(url, final_url, job.work_dir, destination, settings.get("min_image_side", 200)):
+                outcome = save_image(url, final_url, job.work_dir, destination, settings.get("min_image_side", 200))
+                outcomes.append(outcome)
+                if outcome == "saved":
                     image_names[url] = destination.stem
                     image_paths.append(destination)
-        job.metadata["images_failed"] = len(selected) - len(image_paths)
+        job.metadata["images_small"] = outcomes.count("small")
+        job.metadata["images_failed"] = outcomes.count("failed")
+        # Predict here, not before downloading: only now is it known which images are icons that
+        # will not be OCR'd. Downloading is cheap; OCR is the cost being predicted.
+        cost.predict(ocr_images=len(image_paths), policy=job.policy)
 
         write_caption(page, job.output_dir, image_names)
         if page.structured:

@@ -17,3 +17,5 @@ results/
 tests/fixtures/local/
 # Synthetic test media is original content and is committed on purpose.
 !tests/fixtures/synthetic/*
+# Conversion cost ledger: local history of what each conversion cost.
+logs/

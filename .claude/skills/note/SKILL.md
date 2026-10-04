@@ -36,11 +36,16 @@ argument-hint: "<链接> [格式名 | 自定义格式描述]"
 ### 2. 提取素材
 
 ```powershell
-$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')
 python scripts/extract.py "<链接>"
 ```
 
-第一行在 Windows 上刷新 PATH，避免新装的 FFmpeg 找不到。
+**这条命令单独运行**，不要在同一次调用里加别的命令（如 `cd`、刷新 PATH）。xhs-library 调用本 skill 时只允许以 `python scripts/extract.py` 和 `python scripts/validate_result.py` 开头的命令，合在一起的命令会被整条拒绝。
+
+只有当它报错 "FFmpeg is not installed or is not on PATH"（Windows 上刚装完 FFmpeg 时）才刷新 PATH，然后**另起一次调用**重新运行上面的命令：
+
+```powershell
+$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')
+```
 
 - 脚本自己决定输出目录并打印出来：小红书是 `output/<短码或 note_id>/`，其他网页是 `output/web/<id>/`。只想知道目录时加 `--where`。
 - 已有完整的提取结果时，脚本直接复用，不重新下载；用户要求重新提取时加 `--force`。

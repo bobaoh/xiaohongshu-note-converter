@@ -38,6 +38,26 @@ def xhs_library_link_key(url: str) -> str:
     return re.sub(r"[^0-9A-Za-z_-]", "", segments[-1]) or "note"
 
 
+#: The commands xhs-library lets Claude run while it uses /note (GENERAL_SKILL_TOOLS in
+#: xhs_library/other_links.py): Bash or PowerShell calls that start with one of these.
+LIBRARY_ALLOWED_COMMANDS = ("python scripts/extract.py", "python scripts/validate_result.py")
+
+
+def command_blocks(skill: Path) -> list[list[str]]:
+    text = skill.read_text(encoding="utf-8")
+    return [block.strip().splitlines() for block in re.findall(r"```(?:powershell|bash|sh)\n(.*?)```", text, re.S)]
+
+
+def test_note_skill_commands_fit_the_library_allowlist():
+    """A block that runs a script must be that one command alone: the library refuses a call
+    that mixes in anything else (a PATH refresh, a cd), and then no result gets written."""
+    blocks = command_blocks(ROOT / ".claude/skills/note/SKILL.md")
+    script_blocks = [block for block in blocks if any(line.strip().startswith("python ") for line in block)]
+    assert script_blocks, "the skill should show how to run the extractor and the validator"
+    for block in script_blocks:
+        assert len(block) == 1 and block[0].strip().startswith(LIBRARY_ALLOWED_COMMANDS), block
+
+
 def test_scripts_skill_and_formats_are_where_the_library_looks():
     for relative in ("scripts/extract_note.py", "scripts/validate_result.py", ".claude/skills/xhs-note/SKILL.md"):
         assert (ROOT / relative).exists(), relative

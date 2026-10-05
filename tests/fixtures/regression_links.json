@@ -88,5 +88,44 @@
       "100g plain flour",
       "页面结构化数据"
     ]
+  },
+  {
+    "code": "reddit-gifrecipes",
+    "url": "https://www.reddit.com/r/GifRecipes/comments/1pokml7/peppercrusted_beef_tenderloin/",
+    "covers": "Reddit GIF post; the recipe is in the poster's comment, under a bot comment",
+    "source": "reddit",
+    "note_type": "video",
+    "post_kind": "gif",
+    "author": "u/TheLadyEve",
+    "title": "Pepper-crusted beef tenderloin",
+    "has_audio": false,
+    "comments_contains": [
+      "1½ tbsp cracked black pepper",
+      "u/TheLadyEve [楼主]"
+    ],
+    "comments_exclude": [
+      "AutoModerator"
+    ],
+    "ocr_contains": [
+      "PEPPER CRUSTED BEEF TENDERLOIN",
+      "Refrigerate uncovered overnight"
+    ]
+  },
+  {
+    "code": "reddit-fried-milk",
+    "url": "https://www.reddit.com/r/Cooking/comments/1wvr2qc/fried_milk_a_german_medieval_recipe_from_1350/",
+    "covers": "Reddit text post: the story in the post text, the ingredient list in the poster's comment",
+    "source": "reddit",
+    "note_type": "post",
+    "post_kind": "text",
+    "author": "u/EwigeSuppe",
+    "caption_contains": [
+      "Buch von Guter Speise",
+      "curdled"
+    ],
+    "comments_contains": [
+      "1.7 L low-fat milk",
+      "u/EwigeSuppe [楼主]"
+    ]
   }
 ]

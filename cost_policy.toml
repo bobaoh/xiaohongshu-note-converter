@@ -32,3 +32,12 @@ tokens_per_image = 1600
 max_images = 8            # images from the main text that are downloaded and OCR'd; the rest are counted as skipped
 min_image_side = 200      # smaller images (icons, avatars, spacers) are not saved
 thin_text_chars = 200     # less main text than this adds a content_warning
+
+[reddit]
+# Reddit posts (notekit/sources/reddit.py).
+max_comments = 20           # comments by other people kept in comments.txt; the poster's own comments are always kept
+skip_authors = ["AutoModerator"]  # bots whose comments are dropped
+follow_links = true         # link posts: also read the linked page's main text (not its images)
+max_images = 8              # images linked inside a text post that are downloaded and OCR'd
+min_image_side = 200
+min_request_seconds = 2.0   # pause between requests to Reddit, on top of what its rate-limit headers ask

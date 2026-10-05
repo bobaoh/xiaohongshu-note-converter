@@ -20,26 +20,29 @@ import pytest
 from conftest import LOCAL
 
 import extract_note
-from notekit.sources import web
+from notekit.cost import load_policy
+from notekit.sources import reddit, web
 from regression import check_expectations, load_expectations
 
 pytestmark = [pytest.mark.local, pytest.mark.usefixtures("require_ffmpeg")]
 
 
 PAGE_KEYS = (
-    "source", "note_type", "author", "title", "image_count", "live_photo_count",
-    "caption_contains", "min_text_chars", "structured_types",
+    "source", "note_type", "post_kind", "author", "title", "image_count", "live_photo_count",
+    "caption_contains", "comments_contains", "comments_exclude", "min_text_chars", "structured_types",
 )
 
 
 def load_cached(code: str):
     """The cache directory, the source name, and the parsed note or web page."""
     cache = LOCAL / code
-    if not (cache / "page.html").exists():
+    if not (cache / "source.json").exists():
         pytest.skip(f"{code} is not cached; run tests/fixtures/fetch_local.py")
     info = json.loads((cache / "source.json").read_text(encoding="utf-8"))
-    page = (cache / "page.html").read_text(encoding="utf-8")
     source = info.get("source", "xiaohongshu")
+    if source == "reddit":
+        return cache, source, reddit.post_from_feed((cache / "feed.xml").read_bytes())
+    page = (cache / "page.html").read_text(encoding="utf-8")
     if source == "web":
         return cache, source, web.page_from_html(info["resolved_url"], page)
     return cache, source, extract_note.note_from_page(info["resolved_url"], page)
@@ -47,6 +50,18 @@ def load_cached(code: str):
 
 def page_metadata(source: str, parsed, output_dir) -> dict:
     """What the source writes to metadata.json before media processing; also writes caption.txt."""
+    if source == "reddit":
+        settings = load_policy()["reddit"]
+        reddit.write_caption(parsed, output_dir)
+        comments = reddit.select_comments(parsed, settings["max_comments"], settings["skip_authors"])
+        reddit.write_comments(comments, output_dir, len(parsed.comments))
+        return {
+            "source": "reddit",
+            "note_type": "video" if parsed.kind in ("gif", "video") else "post",
+            "post_kind": parsed.kind,
+            "title": parsed.title,
+            "author": f"u/{parsed.author}",
+        }
     if source == "web":
         web.write_caption(parsed, output_dir, image_names={})
         return {
@@ -87,6 +102,14 @@ def test_cached_media(expected, tmp_path, monkeypatch):
     images = sorted((cache / "images").glob("image-*.jpg"))
     if source == "web":
         metadata.update(extract_note.analyze_images(images, tmp_path, "web pages are not transcribed"))
+    elif source == "reddit":
+        videos = sorted(cache.glob("video.*"))
+        if videos:
+            work = tmp_path / "work"
+            work.mkdir()
+            metadata.update(extract_note.analyze_video(videos[0], work, tmp_path))
+        else:
+            metadata.update(extract_note.analyze_images(images, tmp_path, reddit.NO_SPEECH))
     elif parsed.note_type == "video":
         work = tmp_path / "work"
         work.mkdir()

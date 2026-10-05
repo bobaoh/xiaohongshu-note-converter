@@ -1,4 +1,4 @@
-"""Extract any supported link (Xiaohongshu or an ordinary web page) into an output directory.
+"""Extract any supported link (Xiaohongshu, a Reddit post, or an ordinary web page) into an output directory.
 
     python scripts/extract.py <url>            # writes to the default directory, reusing a complete one
     python scripts/extract.py <url> --where    # only print that directory

@@ -30,7 +30,7 @@ def fake_web(monkeypatch, body: bytes, files: dict[str, Path] | None = None, con
         cost.count("bytes_downloaded", len(body))
         return net.Response(PAGE_URL, content_type, body)
 
-    def fake_download(url, destination, referer):
+    def fake_download(url, destination, referer, user_agent=net.USER_AGENT):
         calls["download"].append(url)
         if url not in (files or {}):
             raise RuntimeError(f"404 {url}")

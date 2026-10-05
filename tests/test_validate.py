@@ -149,3 +149,8 @@ def test_every_format_json_example_matches_its_field_table(format_file, tmp_path
 def test_structured_data_is_an_allowed_source(tmp_path):
     """Web pages can publish schema.org data (structured.json); results may cite it."""
     assert run(tmp_path, mutated(sources_used=["caption", "structured"]))[0] == []
+
+
+def test_comments_are_an_allowed_source(tmp_path):
+    """Reddit posts come with comments.txt; a recipe is often in the poster's own comment."""
+    assert run(tmp_path, mutated(sources_used=["caption", "comments"]))[0] == []

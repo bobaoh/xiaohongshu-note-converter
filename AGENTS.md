@@ -3,7 +3,10 @@
 This repository turns a link into structured Markdown + JSON notes. Examples: a recipe, a travel guide, a product review, a tutorial, a summary, or a format the user describes. Supported links:
 
 - Xiaohongshu / RedNote notes, both video and image posts
+- Reddit posts, read through Reddit's public RSS feeds: text, image, GIF, video, gallery, and link posts, with their comments
 - any ordinary web page: articles, blogs, recipe sites, documentation
+
+`scripts/discover.py` lists popular Reddit posts for the topics in `reddit_topics.toml`. Turning them into notes on a schedule is designed in `docs/reddit.md` but not built.
 
 It also records what every conversion costs and flags the expensive ones.
 
@@ -26,6 +29,7 @@ Trigger this workflow for any http(s) link the user wants turned into notes, or 
 
 - **Network is required.** `scripts/extract.py` fetches the page and downloads images or video. The first run also downloads the Whisper model. If the sandbox blocks network access, request approval to run the command with network access; do not try to work around the block.
 - **Video notes take 2–4 minutes** because of local transcription. Let the command finish; do not kill it early or rerun it in parallel. Web pages take seconds.
+- **Reddit allows about one request per minute.** The extractor waits as Reddit's rate-limit headers ask, so a Reddit link can sit for up to a minute before anything happens. Do not run several Reddit extractions in parallel to save time; they share the same limit.
 - **Reuse extractions.** `scripts/extract.py` reuses a complete extraction by itself. Pass `--force` only when the user asks to extract again.
 - **Images.** SKILL.md asks you to look at `media/image-NN.jpg` when steps, maps, or price lists are shown only in pictures. If you cannot view local images, rely on `ocr.txt` and list what could not be checked in the result's `missing` field.
 - **FFmpeg on Windows.** If `ffmpeg` is not found right after installation, reload PATH in PowerShell before retrying:
@@ -50,6 +54,7 @@ This applies to web chat AIs or agents without a shell, for example when the use
 - Process only public links the user supplied.
 - Do not bypass login walls, private-note permissions, paywalls, CAPTCHAs, or DRM.
 - Never ask for, store, or print cookies, session tokens, QR-login data, or passwords.
+- Reddit: read only the public RSS feeds and media hosts, identified by `notekit.sources.reddit.USER_AGENT`. Do not retry around a 403, spoof a browser, or use other endpoints to get past a block. Future API credentials go only in the git-ignored `reddit_credentials.toml` (see `docs/reddit.md`).
 - If a link is unavailable, report the `error` from `metadata.json` and stop.
 
 ## Architecture
@@ -57,19 +62,24 @@ This applies to web chat AIs or agents without a shell, for example when the use
 ```
 scripts/extract.py        CLI for any link (default output dir, reuse, --where, --force)
 scripts/extract_note.py   original CLI, kept for xhs-library (always extracts into --output)
+scripts/discover.py       CLI: popular Reddit posts per topic in reddit_topics.toml, optionally extracted
 notekit/
   pipeline.py             picks a source, runs it under cost tracking, writes metadata.json
+  discover.py             topic loading, filtering, deduplication, and caps for scripts/discover.py
   sources/__init__.py     Source interface and registry (SOURCES); read its docstring first
   sources/xiaohongshu.py  Xiaohongshu notes
+  sources/reddit.py       Reddit posts: RSS client with rate limiting, RedditClient interface for a future API client
   sources/web.py          any other web page (trafilatura + schema.org JSON-LD)
   media.py                FFmpeg, Whisper transcription, OCR (source-agnostic)
   net.py                  fetching and downloads (tests replace these)
   cost.py                 cost tracking, expensive flags, prediction, ledger
-cost_policy.toml          thresholds and estimate factors
+cost_policy.toml          thresholds and estimate factors; per-source limits ([web], [reddit])
+reddit_topics.toml        topics for scripts/discover.py
+docs/reddit.md            how Reddit is read, discovery, and the planned scheduled crawl
 scripts/cost_report.py    summary of the cost ledger
 ```
 
-Every source writes the same output directory (`metadata.json`, `caption.txt`, `ocr.txt`, `transcript.txt`, `media/image-NN.jpg`, optionally `structured.json`), so the skill, formats, validation, and cost tracking work the same for all of them.
+Every source writes the same output directory (`metadata.json`, `caption.txt`, `ocr.txt`, `transcript.txt`, `media/image-NN.jpg`, optionally `structured.json` and `comments.txt`), so the skill, formats, validation, and cost tracking work the same for all of them.
 
 ### Adding a source
 
@@ -143,10 +153,10 @@ There are three layers. Run them in this order, and report which ones you ran an
 | 1. Offline | `python -m pytest` | After every code or format change. CI also runs it on every push. | ~1–2 min |
 | 2a. Cached real pages | `python -m pytest -m "local and not slow"` | After any change to page parsing in a source | < 1 s |
 | 2b. Cached real media | `python -m pytest -m local` | Before merging changes to OCR, transcription, FFmpeg calls (`notekit/media.py`), image handling, `WHISPER_REVISIONS`, or dependencies | 7–11 min |
-| 3. Live regression | `python scripts/regression.py` | Before merging source changes, and when a site may have changed its pages | ~8 min, needs network |
+| 3. Live regression | `python scripts/regression.py` | Before merging source changes, and when a site may have changed its pages | ~12 min, needs network |
 
 - **Layer 1** has three parts:
-  - Unit tests for parsing, routing, cost tracking, and validation. They use synthetic pages built in `tests/conftest.py` and `tests/test_web.py`.
+  - Unit tests for parsing, routing, cost tracking, discovery, and validation. They use synthetic pages and Reddit feeds built in `tests/conftest.py` and `tests/test_web.py`. Reddit's rate limiter never sleeps in tests (`no_reddit_waits` in conftest).
   - Media tests. They run FFmpeg, OCR, and Whisper `tiny` on original synthetic media in `tests/fixtures/synthetic/`.
   - The xhs-library contract (`tests/test_contract_xhs_library.py`). If it fails, the change breaks xhs-library.
 - **Layer 2** uses real notes and pages cached in `tests/fixtures/local/`. Create the cache once with `python tests/fixtures/fetch_local.py`. Tests for links that are not cached are skipped, so a skip is not a pass. Say so if the cache is missing.

@@ -242,7 +242,9 @@ def fetch(url: str) -> tuple[str, str]:
     return response.url, decode_html(response.body, response.content_type)
 
 
-def save_image(url: str, referer: str, work_dir: Path, destination: Path, min_side: int) -> str:
+def save_image(
+    url: str, referer: str, work_dir: Path, destination: Path, min_side: int, user_agent: str = net.USER_AGENT
+) -> str:
     """Download an image and save it as JPEG.
 
     Returns "saved", "small" (icons, avatars, thumbnails: not worth OCR), or "failed".
@@ -251,7 +253,7 @@ def save_image(url: str, referer: str, work_dir: Path, destination: Path, min_si
 
     raw = work_dir / (destination.stem + ".download")
     try:
-        net.download(url, raw, referer)
+        net.download(url, raw, referer, user_agent=user_agent)
         with Image.open(raw) as image:
             if min(image.size) < min_side:
                 return "small"

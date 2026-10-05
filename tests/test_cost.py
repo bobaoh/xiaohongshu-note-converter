@@ -52,6 +52,22 @@ def test_cheap_conversion_is_not_flagged(tmp_path):
     assert summary["ai_input"] == {"text_tokens_estimate": 8, "images": 2, "image_tokens_estimate": 3200}
 
 
+def test_rate_limit_waits_are_reported_but_not_counted_as_cost(tmp_path):
+    """Waiting a minute for Reddit's rate limit must not make a cheap conversion "slow"."""
+    import time
+
+    write_outputs(tmp_path)
+    policy = copy.deepcopy(cost.load_policy())
+    policy["thresholds"]["total_seconds"] = 60
+    tracker = cost.Tracker()
+    tracker.started = time.perf_counter() - 100
+    tracker.stages["rate_limit_wait"] = 70.0
+    summary = cost.summarize(tracker, tmp_path, policy)
+    assert 29 < summary["total_seconds"] < 32
+    assert summary["waiting_seconds"] == 70.0
+    assert "slow" not in summary["flags"]
+
+
 def test_each_threshold_raises_its_own_flag(tmp_path):
     write_outputs(tmp_path, caption="字" * 300)
     policy = copy.deepcopy(cost.load_policy())

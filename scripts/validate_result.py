@@ -8,7 +8,7 @@ from pathlib import Path
 
 DEFAULT_FORMATS_DIR = Path(__file__).resolve().parent.parent / ".claude" / "skills" / "xhs-note" / "formats"
 SOURCE_KEYS = ("url", "note_id", "title", "note_type")
-ALLOWED_SOURCES = {"caption", "ocr", "transcript", "images", "structured"}
+ALLOWED_SOURCES = {"caption", "ocr", "transcript", "images", "structured", "comments"}
 TYPE_CHECKS = {
     "string": lambda value: isinstance(value, str),
     "number": lambda value: isinstance(value, (int, float)) and not isinstance(value, bool),

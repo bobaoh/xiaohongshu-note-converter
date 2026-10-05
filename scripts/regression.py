@@ -1,7 +1,8 @@
-"""Live regression: extract the known test notes from Xiaohongshu and check the results.
+"""Live regression: extract the known test links (Xiaohongshu, web pages, Reddit) and check the results.
 
 Run this before merging changes to the extractor. It needs network access and takes
-several minutes because two of the notes are videos.
+several minutes because two of the notes are videos, and Reddit allows about one request
+per minute.
 
     python scripts/regression.py            # all notes
     python scripts/regression.py 9mo7le3NAf # one note
@@ -25,7 +26,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from notekit import pipeline  # noqa: E402
 
 EXPECTATIONS_FILE = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "regression_links.json"
-UNAVAILABLE_MARKERS = ("unavailable", "timed out", "urlopen error", "getaddrinfo", "connection", "http error 4", "http error 5")
+UNAVAILABLE_MARKERS = (
+    "unavailable", "timed out", "urlopen error", "getaddrinfo", "connection", "http error 4", "http error 5",
+    "(http 4", "(http 5", "rate limit", "was not found",  # Reddit's messages
+)
 
 
 def load_expectations() -> list[dict]:
@@ -40,7 +44,7 @@ def check_expectations(expected: dict, metadata: dict, output_dir: Path) -> list
         path = output_dir / name
         return path.read_text(encoding="utf-8") if path.exists() else ""
 
-    for key in ("source", "note_type", "author", "title", "image_count", "live_photo_count"):
+    for key in ("source", "note_type", "post_kind", "author", "title", "image_count", "live_photo_count"):
         if key in expected and metadata.get(key) != expected[key]:
             failures.append(f"{key}: expected {expected[key]!r}, got {metadata.get(key)!r}")
     if "has_audio" in expected and (metadata.get("video") or {}).get("has_audio") != expected["has_audio"]:
@@ -58,11 +62,19 @@ def check_expectations(expected: dict, metadata: dict, output_dir: Path) -> list
     if "min_transcript_lines" in expected and (transcription.get("lines") or 0) < expected["min_transcript_lines"]:
         failures.append(f"transcript lines: expected >= {expected['min_transcript_lines']}, got {transcription.get('lines')}")
 
-    for file_name, key in (("caption.txt", "caption_contains"), ("ocr.txt", "ocr_contains"), ("transcript.txt", "transcript_contains")):
+    for file_name, key in (
+        ("caption.txt", "caption_contains"),
+        ("ocr.txt", "ocr_contains"),
+        ("transcript.txt", "transcript_contains"),
+        ("comments.txt", "comments_contains"),
+    ):
         text = read(file_name).replace(" ", "")
         for needle in expected.get(key, []):
             if needle.replace(" ", "") not in text:
                 failures.append(f"{file_name} does not contain {needle!r}")
+    for needle in expected.get("comments_exclude", []):
+        if needle in read("comments.txt"):
+            failures.append(f"comments.txt should not contain {needle!r}")
     return failures
 
 

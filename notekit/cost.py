@@ -5,11 +5,15 @@ A conversion has two costs:
 - Extraction, measured here: wall time per stage (fetch, download, transcription, OCR), bytes
   downloaded, video length, and how many frames and images went through OCR.
 - The AI step that formats the extracted material, estimated from what the AI has to read: the
-  text in caption.txt, ocr.txt, and transcript.txt, plus the images it may look at.
+  text in caption.txt, ocr.txt, transcript.txt, and comments.txt, plus the images it may look at.
 
 Before the heavy work starts, sources call ``predict`` with what they already know (video length,
 image count), so the ledger can compare predicted and actual cost. That comparison is what a future
 limit on expensive conversions will be based on.
+
+Time spent waiting for a site's rate limit (the ``rate_limit_wait`` stage, used for Reddit) is
+reported as ``waiting_seconds`` and left out of ``total_seconds``: it uses no CPU or tokens, and
+counting it would flag cheap conversions as slow and blur the comparison with predictions.
 
 Thresholds and estimate factors live in ``cost_policy.toml``. Every conversion, including failed
 ones, is appended to the ledger (``logs/conversions.jsonl``); ``scripts/cost_report.py`` summarizes it.
@@ -58,6 +62,14 @@ DEFAULT_POLICY = {
         "max_images": 8,
         "min_image_side": 200,
         "thin_text_chars": 200,
+    },
+    "reddit": {
+        "max_comments": 20,
+        "skip_authors": ["AutoModerator"],
+        "follow_links": True,
+        "max_images": 8,
+        "min_image_side": 200,
+        "min_request_seconds": 2.0,
     },
 }
 
@@ -170,13 +182,14 @@ def summarize(tracker: Tracker, output_dir: Path, policy: dict, image_count: int
     """The cost block written to metadata.json and the ledger."""
     texts = [
         (output_dir / name).read_text(encoding="utf-8")
-        for name in ("caption.txt", "ocr.txt", "transcript.txt")
+        for name in ("caption.txt", "ocr.txt", "transcript.txt", "comments.txt")
         if (output_dir / name).exists()
     ]
     text_tokens = sum(estimate_tokens(text) for text in texts)
     counts = {name: round(value, 2) for name, value in sorted(tracker.counts.items())}
+    waiting = tracker.stages.get("rate_limit_wait", 0.0)
     measured = {
-        "total_seconds": tracker.elapsed(),
+        "total_seconds": round(tracker.elapsed() - waiting, 2),
         "ocr_seconds": tracker.stages.get("ocr", 0.0),
         "transcribe_seconds": tracker.stages.get("transcribe", 0.0),
         "video_seconds": counts.get("video_seconds", 0),
@@ -195,6 +208,7 @@ def summarize(tracker: Tracker, output_dir: Path, policy: dict, image_count: int
         "flags": sorted(over),
         "over": over,
         "total_seconds": measured["total_seconds"],
+        "waiting_seconds": waiting,
         "stages": dict(sorted(tracker.stages.items())),
         "counts": counts,
         "ai_input": {

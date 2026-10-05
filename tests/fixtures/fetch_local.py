@@ -22,17 +22,20 @@ import shutil  # noqa: E402
 import tempfile  # noqa: E402
 
 import extract_note  # noqa: E402
-from notekit import source_for  # noqa: E402
+from notekit import net, source_for  # noqa: E402
 from notekit.cost import load_policy  # noqa: E402
-from notekit.sources import web  # noqa: E402
+from notekit.sources import reddit, web  # noqa: E402
 from regression import load_expectations  # noqa: E402
 
 LOCAL = Path(__file__).resolve().parent / "local"
 
 
 def fetch(expected: dict) -> None:
-    if source_for(expected["url"]).name == "web":
+    source = source_for(expected["url"]).name
+    if source == "web":
         fetch_web(expected)
+    elif source == "reddit":
+        fetch_reddit(expected)
     else:
         fetch_xiaohongshu(expected)
 
@@ -57,6 +60,42 @@ def fetch_web(expected: dict) -> None:
             saved += 1
     shutil.rmtree(work, ignore_errors=True)
     print(f"{expected['code']}: web, {len(page.text)} chars, {saved} images")
+
+
+def fetch_reddit(expected: dict) -> None:
+    """Cache the post feed and the media the Reddit source would read."""
+    target = LOCAL / expected["code"]
+    target.mkdir(parents=True, exist_ok=True)
+    policy = load_policy()
+    client = reddit.make_client(policy)
+    feed = client.get_feed(reddit.post_feed_url(reddit.post_id_from_url(expected["url"])))
+    post = reddit.post_from_feed(feed)
+    (target / "feed.xml").write_bytes(feed)
+    (target / "source.json").write_text(
+        json.dumps({"input_url": expected["url"], "resolved_url": post.permalink, "source": "reddit"}), encoding="utf-8"
+    )
+    if post.kind in ("gif", "video"):
+        how, url = reddit.video_url(post)
+        if how == "hls":
+            net.download_hls(url, target / "video.mp4", reddit.USER_AGENT)
+        else:
+            net.download(url, target / f"video{Path(url).suffix}", post.permalink, user_agent=reddit.USER_AGENT)
+    else:
+        images = target / "images"
+        images.mkdir(exist_ok=True)
+        work = Path(tempfile.mkdtemp())
+        saved = 0
+        for urls in reddit.image_candidates(post, policy["reddit"]["max_images"]):
+            destination = images / f"image-{saved + 1:02d}.jpg"
+            for url in urls:
+                outcome = web.save_image(url, post.permalink, work, destination, policy["reddit"]["min_image_side"],
+                                         user_agent=reddit.USER_AGENT)
+                if outcome != "failed":
+                    break
+            saved += outcome == "saved"
+        shutil.rmtree(work, ignore_errors=True)
+    size = sum(path.stat().st_size for path in target.rglob("*") if path.is_file())
+    print(f"{expected['code']}: reddit {post.kind}, {len(post.comments)} comments, {size // 1024} KB")
 
 
 def fetch_xiaohongshu(expected: dict) -> None:

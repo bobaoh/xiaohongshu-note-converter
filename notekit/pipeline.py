@@ -12,7 +12,7 @@ from pathlib import Path
 from . import cost
 from .sources import SOURCES, Job, source_for
 
-OUTPUT_FILES = ("caption.txt", "transcript.txt", "ocr.txt", "metadata.json", "structured.json")
+OUTPUT_FILES = ("caption.txt", "transcript.txt", "ocr.txt", "comments.txt", "metadata.json", "structured.json")
 
 
 def default_output_dir(url: str, root: Path | str = "output", source: str | None = None) -> Path:
@@ -90,7 +90,7 @@ def main(argv: list[str] | None = None, legacy: bool = False) -> int:
         description="Extract the text, speech, and on-screen or image text from a link. "
         f"Sources: {', '.join(s.name for s in SOURCES)} (picked from the URL)."
     )
-    parser.add_argument("url", help="A Xiaohongshu/RedNote/xhslink.com link or any http(s) web page")
+    parser.add_argument("url", help="A Xiaohongshu/RedNote/xhslink.com link, a Reddit post, or any http(s) web page")
     parser.add_argument(
         "--output",
         help="Directory for caption, transcript, OCR, and metadata (default: output/<key> for Xiaohongshu, "

@@ -1,6 +1,6 @@
 ---
 name: note
-description: "把任意链接（小红书/RedNote 帖子，或任何网页：文章、博客、菜谱网站、文档）提取出正文、图片文字、语音转写，再转换成指定格式的 Markdown + JSON：菜谱、通用摘要、旅行攻略、好物测评、教程，或用户临时描述的任意格式。当用户给出链接并要求提取、整理、总结、转写、做成菜谱/攻略/清单/笔记，或要求把已提取的内容换一种格式时使用。会标出成本高的转换。"
+description: "把任意链接（小红书/RedNote 帖子、Reddit 帖子，或任何网页：文章、博客、菜谱网站、文档）提取出正文、评论、图片文字、语音转写，再转换成指定格式的 Markdown + JSON：菜谱、通用摘要、旅行攻略、好物测评、教程，或用户临时描述的任意格式。当用户给出链接并要求提取、整理、总结、转写、做成菜谱/攻略/清单/笔记，或要求把已提取的内容换一种格式时使用。会标出成本高的转换。"
 argument-hint: "<链接> [格式名 | 自定义格式描述]"
 ---
 
@@ -47,9 +47,9 @@ python scripts/extract.py "<链接>"
 $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')
 ```
 
-- 脚本自己决定输出目录并打印出来：小红书是 `output/<短码或 note_id>/`，其他网页是 `output/web/<id>/`。只想知道目录时加 `--where`。
+- 脚本自己决定输出目录并打印出来：小红书是 `output/<短码或 note_id>/`，Reddit 是 `output/reddit/<帖子 id>/`，其他网页是 `output/web/<id>/`。只想知道目录时加 `--where`。
 - 已有完整的提取结果时，脚本直接复用，不重新下载；用户要求重新提取时加 `--force`。
-- 视频要转写，耗时 2–4 分钟，建议放到后台运行。网页通常几秒。
+- 视频要转写，耗时 2–4 分钟，建议放到后台运行。网页通常几秒。Reddit 限制大约每分钟一次请求，可能要先等上一分钟。
 - 失败时读取 `metadata.json` 的 `error` 字段，照实告诉用户，不要猜。
 
 ### 3. 读取素材
@@ -63,6 +63,7 @@ $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Env
 | `structured.json` | 网页公开的 schema.org 数据（菜谱配料、步骤、产品价格） | 只有部分网页有；内容已汇总在 `caption.txt` 末尾 |
 | `ocr.txt` | 视频帧 `[12.0s|0.91]` 或图片 `[image-03|0.88]` 中的文字 | 视频的字幕通常最完整 |
 | `transcript.txt` | 带时间戳的语音转写 | 没有语音时为空 |
+| `comments.txt` | 帖子下的评论（目前只有 Reddit），`[楼主]` 标出作者本人的评论 | 只有部分来源有；读法见来源说明 |
 | `media/image-NN.jpg` | 帖子或网页正文里的图片 | 有步骤图、价格牌、地图等只用图片表达的信息时，用 Read 直接看图 |
 
 ### 成本
@@ -109,7 +110,7 @@ $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Env
 }
 ```
 
-- `sources_used` 只列实际用到的来源，取值限于 `caption`、`ocr`、`transcript`、`images`、`structured`。
+- `sources_used` 只列实际用到的来源，取值限于 `caption`、`ocr`、`transcript`、`images`、`structured`、`comments`。
 - `uncertain` 列出有疑问的内容：识别不清的文字，以及不同来源之间有冲突的地方。
 - `missing` 列出格式要求但素材里没有的字段。这些字段在 `data` 中填 `null`（数组字段填 `[]`）。
 
@@ -154,7 +155,8 @@ python scripts/validate_result.py "results/<note_id>-<format>.json"
 ## 通用整理规则
 
 **来源优先级**
-- 作者自己写的文字（帖子正文、网页正文、网页公开的结构化数据）> 视频字幕/图片文字（OCR）> 语音转写 > 看图推断。
+- 作者自己写的文字（帖子正文、作者本人的评论、网页正文、网页公开的结构化数据）> 视频字幕/图片文字（OCR）> 语音转写 > 其他人的评论 > 看图推断。
+- 其他人的评论只能作为补充（如替换食材、常见问题），写进结果时注明"来自评论"，不能覆盖作者给出的数字。
 - 数字、用量、价格、时间、地址优先取正文和清晰的 OCR。
 
 **不编造**

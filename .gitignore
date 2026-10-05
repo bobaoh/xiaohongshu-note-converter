@@ -19,3 +19,5 @@ tests/fixtures/local/
 !tests/fixtures/synthetic/*
 # Conversion cost ledger: local history of what each conversion cost.
 logs/
+# Credentials for a future Reddit API client (docs/reddit.md): never commit them.
+reddit_credentials.toml

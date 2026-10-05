@@ -148,3 +148,100 @@ def make_page(note_data: dict | None) -> str:
 
 def note_url(data: dict) -> str:
     return NOTE_URL.format(note_id=data["noteId"], type=data["type"])
+
+
+# --- Synthetic Reddit feeds ------------------------------------------------------------
+# These mirror Reddit's RSS (Atom) feeds with invented IDs, names, and text. In real feeds the
+# entry content is HTML escaped into XML, and the HTML itself escapes "&" in URLs, so links are
+# escaped twice; the post text and comments sit between <!-- SC_OFF --> and <!-- SC_ON -->.
+
+REDDIT = "https://www.reddit.com"
+
+
+def reddit_permalink(post_id: str = "t3st01", subreddit: str = "TestKitchen") -> str:
+    return f"{REDDIT}/r/{subreddit}/comments/{post_id}/a_test_post/"
+
+
+def reddit_post_entry(
+    post_id: str = "t3st01",
+    subreddit: str = "TestKitchen",
+    title: str = "Test dumplings & dipping sauce",
+    author: str = "test_cook",
+    link: str | None = None,
+    text_html: str = "",
+    thumbnail: str = "",
+    published: str = "2026-09-30T08:00:00+00:00",
+) -> str:
+    import html
+
+    permalink = reddit_permalink(post_id, subreddit)
+    link = link or permalink
+    body = f'<!-- SC_OFF --><div class="md">{text_html}</div><!-- SC_ON --> ' if text_html else ""
+    byline = (
+        f'&#32; submitted by &#32; <a href="{REDDIT}/user/{author}"> /u/{author} </a> <br/> '
+        f'<span><a href="{html.escape(link)}">[link]</a></span> &#32; <span><a href="{permalink}">[comments]</a></span>'
+    )
+    if thumbnail:
+        content = (
+            f'<table> <tr><td> <a href="{permalink}"> <img src="{html.escape(thumbnail)}" alt="{html.escape(title)}" /> </a> '
+            f"</td><td> {body}{byline} </td></tr></table>"
+        )
+        media = f'<media:thumbnail url="{html.escape(thumbnail)}" />'
+    else:
+        content, media = body + byline, ""
+    return (
+        f"<entry><author><name>/u/{author}</name><uri>{REDDIT}/user/{author}</uri></author>"
+        f'<category term="{subreddit}" label="r/{subreddit}"/><content type="html">{html.escape(content)}</content>'
+        f'<id>t3_{post_id}</id>{media}<link href="{permalink}" /><updated>{published}</updated>'
+        f"<published>{published}</published><title>{html.escape(title)}</title></entry>"
+    )
+
+
+def reddit_comment_entry(comment_id: str, author: str, text_html: str, post_id: str = "t3st01", subreddit: str = "TestKitchen") -> str:
+    import html
+
+    content = f'<!-- SC_OFF --><div class="md">{text_html}</div><!-- SC_ON -->'
+    return (
+        f"<entry><author><name>/u/{author}</name><uri>{REDDIT}/user/{author}</uri></author>"
+        f'<category term="{subreddit}" label="r/{subreddit}"/><content type="html">{html.escape(content)}</content>'
+        f'<id>t1_{comment_id}</id><link href="{reddit_permalink(post_id, subreddit)}{comment_id}/" />'
+        f"<updated>2026-09-30T09:00:00+00:00</updated><title>/u/{author} on a test post</title></entry>"
+    )
+
+
+def reddit_feed(*entries: str, subreddit: str = "TestKitchen") -> bytes:
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom" '
+        'xmlns:media="http://search.yahoo.com/mrss/">'
+        f'<category term="{subreddit}" label="r/{subreddit}"/><updated>2026-10-01T00:00:00+00:00</updated>'
+        f"<id>/r/{subreddit}/.rss</id><title>{subreddit}</title>{''.join(entries)}</feed>"
+    ).encode("utf-8")
+
+
+#: A GifRecipes-style post: a GIF, a pinned bot comment, the recipe in the poster's comment,
+#: a deleted comment, and replies.
+RECIPE_COMMENTS = [
+    ("bot001", "AutoModerator", "<p>Please post your recipe in reply to me.</p>"),
+    ("op0001", "test_cook", '<p>Source: <a href="https://food.example.com/dumplings">Example Food</a></p> '
+                            "<ul> <li>200g flour</li> <li>100ml water</li> </ul> <p>Steam for 8 minutes.</p>"),
+    ("del001", "[deleted]", "<p>[deleted]</p>"),
+    ("rdr001", "reader_one", "<p>Can I freeze these?</p>"),
+    ("op0002", "test_cook", "<p>Yes, freeze them &amp; steam from frozen for 12 minutes.</p>"),
+    ("rdr002", "reader_two", '<p>See <a href="/r/TestKitchen/wiki">the wiki</a>.</p>'),
+]
+
+
+@pytest.fixture(autouse=True)
+def no_reddit_waits(monkeypatch):
+    """Reddit's rate limiter must never sleep in tests; the waits it asked for are recorded."""
+    from notekit.sources import reddit
+
+    waits: list[float] = []
+    clock = [0.0]
+
+    def sleep(seconds: float) -> None:
+        waits.append(seconds)
+        clock[0] += seconds
+
+    monkeypatch.setattr(reddit, "LIMITER", reddit.RateLimiter(clock=lambda: clock[0], sleep=sleep))
+    return waits

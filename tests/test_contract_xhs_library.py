@@ -85,11 +85,29 @@ def test_xiaohongshu_output_directory_is_output_slash_link_key(url):
     assert default_output_dir(url) == Path("output") / xhs_library_link_key(url)
 
 
-def test_other_sources_never_land_where_the_library_scans():
+@pytest.mark.parametrize("url", ["https://example.com/recipe", "https://www.reddit.com/r/GifRecipes/comments/1pokml7/slug/"])
+def test_other_sources_never_land_where_the_library_scans(url):
     """The library's contract test reads every output/*/metadata.json and expects a 24-hex note ID
     and note_type "video" or "normal", so other sources must stay one level deeper."""
-    directory = default_output_dir("https://example.com/recipe")
+    directory = default_output_dir(url)
     assert len(directory.relative_to("output").parts) == 2
+
+
+@pytest.mark.parametrize(
+    ("url", "code", "printed"),
+    [
+        ("https://www.reddit.com/r/GifRecipes/comments/1pokml7/slug/", 0, str(Path("output/reddit/1pokml7"))),
+        ("https://www.reddit.com/r/GifRecipes/", 2, ""),
+    ],
+)
+def test_where_gives_the_library_its_key_or_refuses(url, code, printed):
+    """OtherLinksExtractor.key_for runs `extract.py <url> --where` and keeps the path under output/;
+    exit code 2 makes the library report the link as unsupported."""
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "extract.py"), url, "--where"],
+        capture_output=True, text=True, encoding="utf-8", cwd=ROOT,
+    )
+    assert (result.returncode, result.stdout.strip()) == (code, printed), result.stderr
 
 
 def run_extract_note(tmp_path, monkeypatch, data, files, *flags) -> tuple[dict, Path]:

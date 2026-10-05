@@ -8,6 +8,7 @@ Every source turns a URL into the same output directory, so everything after ext
 - ``caption.txt``: the author's own text (post caption, article body)
 - ``ocr.txt``: text read from images or video frames
 - ``transcript.txt``: speech, if any (empty otherwise)
+- ``comments.txt``: comments by readers and the author, for sources that have them
 - ``media/image-NN.jpg``: images the formatting step may look at
 
 To add a source:
@@ -57,10 +58,11 @@ class Source:
 
 
 def _sources() -> list[Source]:
+    from .reddit import RedditSource
     from .web import WebSource
     from .xiaohongshu import XiaohongshuSource
 
-    return [XiaohongshuSource(), WebSource()]
+    return [XiaohongshuSource(), RedditSource(), WebSource()]
 
 
 SOURCES: list[Source] = _sources()

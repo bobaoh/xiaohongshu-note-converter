@@ -1,0 +1,42 @@
+# Topics for scripts/discover.py: which Reddit posts are worth turning into notes.
+#
+#     python scripts/discover.py             # list what each topic would pick; changes nothing
+#     python scripts/discover.py --extract   # also extract the picked posts into output/reddit/
+#
+# Each [[topic]] reads the feeds of some subreddits (or searches them) and picks the best-ranked
+# posts that were not extracted before. Reddit ranks the feeds: with sort = "top", the first post
+# has the highest score in the time window.
+#
+# Reddit's RSS feeds allow about one request per minute, so every subreddit adds about a minute
+# to a run, and every extracted post one more. Nothing here runs on a schedule yet; see
+# docs/reddit.md for the planned scheduled crawl.
+
+[run]
+max_total = 4              # posts picked per run, across all topics
+
+[defaults]                 # every topic uses these unless it sets its own
+sort = "top"               # feeds: top | hot | new | rising | controversial; searches: relevance | hot | top | new | comments
+time = "day"               # for top, controversial, and searches: hour | day | week | month | year | all
+limit = 25                 # posts read from each feed (at most 100)
+max_new = 2                # posts picked per topic per run
+kinds = []                 # post kinds to keep: text, image, gif, video, gallery, link, crosspost; empty keeps all
+include = []               # keep only titles containing one of these words (case-insensitive); empty keeps all
+exclude = []               # drop titles containing any of these
+# min_score = 100          # only with an API client; RSS has no scores, so these are ignored for now
+# min_comments = 20
+
+[[topic]]
+name = "recipes"
+subreddits = ["GifRecipes", "recipes"]
+time = "week"              # r/GifRecipes gets only a few posts a week; posts picked before are skipped anyway
+exclude = ["[request]", "[meta]"]
+format = "recipe"          # note format for these posts ("" lets the note step choose)
+
+[[topic]]
+name = "cooking-tips"
+subreddits = ["Cooking"]
+query = "tips OR technique"  # search inside the subreddits instead of reading their feeds
+time = "week"
+kinds = ["text"]
+max_new = 1
+format = "summary"

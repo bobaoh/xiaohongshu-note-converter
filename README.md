@@ -3,7 +3,10 @@
 Turn a link into a structured Markdown + JSON document in any format you define: a recipe, a summary, a travel guide, a product review, a tutorial, or your own. Supported links:
 
 - Xiaohongshu / RedNote notes: video and image posts
+- Reddit posts: text, image, GIF, video, gallery, and link posts, with their comments
 - any ordinary web page: articles, blogs, recipe sites, documentation
+
+For Reddit there is also a tool that lists the popular posts of chosen topics, so you can turn them into notes. See [Reddit](#reddit).
 
 Every conversion records what it cost, and expensive ones are flagged.
 
@@ -46,6 +49,7 @@ Open Claude Code in this folder:
 ```
 /note https://example.com/some-recipe                    # any web page; pick a format automatically
 /note http://xhslink.com/o/example recipe                # a Xiaohongshu note in a defined format
+/note https://www.reddit.com/r/GifRecipes/comments/<id>/ # a Reddit post, with the recipe from the poster's comment
 /note https://example.com/travel 店名、地址、人均、推荐菜    # describe a one-off format
 /note 把刚才那篇换成 tutorial 格式                          # reuse the extraction
 ```
@@ -53,6 +57,7 @@ Open Claude Code in this folder:
 Claude extracts the link, reusing a complete extraction when there is one:
 
 - Xiaohongshu notes go to `output/<key>/`.
+- Reddit posts go to `output/reddit/<post id>/`.
 - Web pages go to `output/web/<id>/`.
 
 The result is written to `results/<note_id>-<format>.md` and `.json`, then checked with `scripts/validate_result.py`. Claude also tells you when the conversion was expensive.
@@ -132,6 +137,8 @@ Typical costs on a Windows laptop:
 | Kind of link | Typical cost |
 |---|---|
 | Web page | 1–8 s |
+| Reddit text post | a few seconds, plus up to a minute waiting for Reddit's rate limit |
+| Reddit GIF recipe (2 min, 64 MB) | about 2.5 min, nearly all of it OCR of the frames; plus the rate-limit wait |
 | Xiaohongshu image note | about 30 s |
 | 2-minute Xiaohongshu video | about 3 min; OCR of video frames is about 85% of that |
 
@@ -151,6 +158,7 @@ The extractor writes these files:
   - source-specific fields; see `.claude/skills/note/sources/`
 - `caption.txt`: the author's own text: a post's caption, or a web page's main text with image markers
 - `transcript.txt`: the timestamped speech transcript (empty when there is no speech)
+- `comments.txt`: comments, for sources that have them (Reddit); the poster's own comments are marked [楼主]
 - `ocr.txt`: deduplicated Chinese/English text from video frames or images
 - `structured.json`: schema.org data a web page publishes, such as recipe ingredients (only when present)
 - `media/`: the images, or the video, audio, and frames with `--keep-media`
@@ -167,6 +175,19 @@ See the docstring of `notekit/sources/__init__.py` and "Adding a source" in `AGE
 4. Add tests and a regression link.
 
 Codex and other agents that read `AGENTS.md` are pointed to the same skill rules automatically. `AGENTS.md` also explains how to use a web chat AI that cannot run commands.
+
+## Reddit
+
+Reddit posts are read through Reddit's public RSS feeds, without signing in. Reddit allows about one request per minute, so expect waits. The feeds have no scores, and galleries only show their first image. An official API client can be added later without changing anything else; see [docs/reddit.md](docs/reddit.md).
+
+To find popular posts on topics you choose, edit `reddit_topics.toml` and run:
+
+```powershell
+python .\scripts\discover.py             # list what each topic would pick; changes nothing
+python .\scripts\discover.py --extract   # also extract the picked posts, then use /note <link> on them
+```
+
+Turning popular posts into notes automatically on a schedule is designed in [docs/reddit.md](docs/reddit.md) but not built yet.
 
 ## Tested versions
 
